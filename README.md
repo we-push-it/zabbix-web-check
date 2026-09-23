@@ -21,6 +21,14 @@ LLD data list. See the **Endpoints config** section below.
 This macro controls the interval in which the HTTP request is performed. This item is used as source for checks of TYPE
 http_status and json_path.
 
+### {$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}
+
+- Format: Zabbix time expression
+- Example: `3m`
+
+This macro controls how long "no data" is tolerated on HTTP status checks before it is considered a problem.
+
+
 ## Endpoints configuration
 
 Every item in the list needs the following keys:
@@ -41,6 +49,7 @@ Every item in the list needs the following keys:
 
 ##### Description
 
-The endpoint is fetched and the HTTP status code is evaluated.
+The endpoint is fetched and the HTTP status code is evaluated. If the status code does not match the value set by
+`{#EXPECT_STATUS}`, a problem of HIGH severity is raised.
 
 [Zabbix LLD]: https://www.zabbix.com/documentation/current/en/manual/discovery/low_level_discovery

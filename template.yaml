@@ -39,6 +39,17 @@ zabbix_export:
                     - \1
               master_item:
                 key: 'web.page.get["{#URL}"]'
+              trigger_prototypes:
+                - uuid: ba3ea028aa854c2fbc62061acb70259a
+                  expression: |
+                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}],{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE})=1
+                    or
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}])<>{#EXPECT_STATUS}
+                  name: 'Unexpected status code'
+                  priority: HIGH
+                  description: |
+                    The status code of the monitored service does not match the expected status {#EXPECT_STATUS} code or
+                    no status code is available for more than {$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}.
           parameters:
             - name: config
               value: '{$PUSHIT.WEBCHECK.CONFIG}'
@@ -55,3 +66,9 @@ zabbix_export:
           description: |
             Controls the interval in which the HTTP endpoint is called. This is used for TYPE = http_status and
             TYPE = json_path.
+        - macro: '{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}'
+          value: 3m
+          description: |
+            Time expression for how long an absent status code is tolerated before the status code is considered not
+            matching the expected status code. This should be higher than PUSHIT.WEBCHECK.HTTP.INTERVAL or it will not
+            have any effect.
