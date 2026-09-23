@@ -1,0 +1,57 @@
+zabbix_export:
+  version: '7.4'
+  templates:
+    - uuid: f589289cf25945c7ad8c6ef054b07c5e
+      template: 'PUSH IT Webcheck'
+      name: 'PUSH IT Webcheck'
+      description: 'This template provides checks for one or more health endpoints running on this machine.'
+      groups:
+        - name: Templates
+      discovery_rules:
+        - uuid: 9894a92ce16b4476a698cf55995d56ee
+          name: HTTP
+          type: SCRIPT
+          key: pushit.webcheck.discovery.http
+          delay: 10m
+          params: 'return JSON.parse(value).config;'
+          filter:
+            evaltype: OR
+            conditions:
+              - macro: '{#TYPE}'
+                value: ^http_status$
+          lifetime_type: DELETE_IMMEDIATELY
+          description: 'Discovery rule for items based on an HTTP response from the endpoint'
+          item_prototypes:
+            - uuid: a0644fcad9c249a38f28b4285e38392c
+              name: 'Response {#NAME}'
+              key: 'web.page.get["{#URL}"]'
+              delay: '{$PUSHIT.WEBCHECK.HTTP.INTERVAL}'
+              history: '0'
+              value_type: TEXT
+            - uuid: d62950d3aa92463e982e4a8ea60c4169
+              name: 'HTTP status {#NAME}'
+              type: DEPENDENT
+              key: 'pushit.webcheck.http.status[{#NAME}]'
+              preprocessing:
+                - type: REGEX
+                  parameters:
+                    - '\AHTTP/[0-9.]+[ \t]+([0-9]{3})(?:[ \t]|\r?\n)'
+                    - \1
+              master_item:
+                key: 'web.page.get["{#URL}"]'
+          parameters:
+            - name: config
+              value: '{$PUSHIT.WEBCHECK.CONFIG}'
+
+      macros:
+        - macro: '{$PUSHIT.WEBCHECK.CONFIG}'
+          value: '[]'
+          description: |
+            Configuration for endpoints to check, see
+            [README](https://github.com/we-push-it/zabbix-web-check/blob/master/README.md) for complete documentation
+            of this structure.
+        - macro: '{$PUSHIT.WEBCHECK.HTTP.INTERVAL}'
+          value: 1m
+          description: |
+            Controls the interval in which the HTTP endpoint is called. This is used for TYPE = http_status and
+            TYPE = json_path.
