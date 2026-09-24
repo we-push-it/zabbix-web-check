@@ -19,6 +19,8 @@ zabbix_export:
             conditions:
               - macro: '{#TYPE}'
                 value: ^http_status$
+              - macro: '{#TYPE}'
+                value: ^json_path$
           lifetime_type: DELETE_IMMEDIATELY
           description: 'Discovery rule for items based on an HTTP response from the endpoint'
           item_prototypes:
@@ -50,6 +52,21 @@ zabbix_export:
                   description: |
                     The status code of the monitored service does not match the expected status {#EXPECT_STATUS} code or
                     no status code is available for more than {$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}.
+            - uuid: 4517fccf57e3473a80e786ada27dac6b
+              name: 'JSON path {#NAME}'
+              type: DEPENDENT
+              key: 'pushit.webcheck.http.json_path[{#NAME}]'
+              value_type: TEXT
+              preprocessing:
+                - type: REGEX
+                  parameters:
+                    - '\r?\n\r?\n([\s\S]*)'
+                    - \1
+                - type: JSONPATH
+                  parameters:
+                    - '{#JSON_PATH}'
+              master_item:
+                key: 'web.page.get["{#URL}"]'
           parameters:
             - name: config
               value: '{$PUSHIT.WEBCHECK.CONFIG}'

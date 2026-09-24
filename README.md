@@ -52,4 +52,14 @@ Every item in the list needs the following keys:
 The endpoint is fetched and the HTTP status code is evaluated. If the status code does not match the value set by
 `{#EXPECT_STATUS}`, a problem of HIGH severity is raised.
 
+#### json_path
+
+##### Additional keys
+
+- `{#JSON_PATH}`: string, JSON path describing the field to select, e.g. `$.status`
+
+##### Description
+
+The endpoint is fetched and a single field in the response body is selected with the JSON path expression.
+
 [Zabbix LLD]: https://www.zabbix.com/documentation/current/en/manual/discovery/low_level_discovery
