@@ -69,6 +69,18 @@ zabbix_export:
                     - '{#JSON_PATH}'
               master_item:
                 key: 'web.page.get["{#URL}"]'
+              trigger_prototypes:
+                - uuid: 9a42683503184a378dc57cc56f3b0d6b
+                  expression: |
+                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}],{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE})=1
+                    or
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}])<>"{#EXPECT_VALUE}"
+                  name: 'Unexpected JSON value'
+                  priority: HIGH
+                  description: |
+                    The value at "{#JSON_PATH}" in the response of the monitored service does not match the expected
+                    value of "{#EXPECT_VALUE}" or no response is available for more than
+                    {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}.
           parameters:
             - name: config
               value: '{$PUSHIT.WEBCHECK.CONFIG}'
@@ -112,3 +124,9 @@ zabbix_export:
             Time expression for how long an absent status code is tolerated before the status code is considered not
             matching the expected status code. This should be higher than PUSHIT.WEBCHECK.HTTP.INTERVAL or it will not
             have any effect.
+        - macro: '{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}'
+          value: 3m
+          description: |
+            Time expression for how long an absent http response (and thus JSON-path-selected value) is tolerated before
+            the JSON-path-selected value is considered not matching the expected value. This should be higher than
+            PUSHIT.WEBCHECK.HTTP.INTERVAL or it will not have any effect.

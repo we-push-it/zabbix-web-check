@@ -29,6 +29,14 @@ http_status and json_path.
 This macro controls how long "no data" is tolerated on HTTP status checks before it is considered a problem.
 
 
+### {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}
+
+- Format: Zabbix time expression
+- Example: `3m`
+
+This macro controls how long "no data" is tolerated on JSON path checks before it is considered a problem.
+
+
 ## Endpoints configuration
 
 Every item in the list needs the following keys:
@@ -57,9 +65,11 @@ The endpoint is fetched and the HTTP status code is evaluated. If the status cod
 ##### Additional keys
 
 - `{#JSON_PATH}`: string, JSON path describing the field to select, e.g. `$.status`
+- `{#EXPECT_VALUE}`: string, expected value in the field described by `{#JSON_PATH}`
 
 ##### Description
 
-The endpoint is fetched and a single field in the response body is selected with the JSON path expression.
+The endpoint is fetched and a single field in the response body is selected with the JSON path expression. If the
+selected value does not match the value in `{#EXPECT_VALUE}`, a problem of HIGH severity is raised.
 
 [Zabbix LLD]: https://www.zabbix.com/documentation/current/en/manual/discovery/low_level_discovery
