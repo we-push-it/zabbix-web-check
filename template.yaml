@@ -34,6 +34,7 @@ zabbix_export:
               name: 'HTTP status {#NAME}'
               type: DEPENDENT
               key: 'pushit.webcheck.http.status[{#NAME}]'
+              discover: NO_DISCOVER
               preprocessing:
                 - type: REGEX
                   parameters:
@@ -57,6 +58,7 @@ zabbix_export:
               type: DEPENDENT
               key: 'pushit.webcheck.http.json_path[{#NAME}]'
               value_type: TEXT
+              discover: NO_DISCOVER
               preprocessing:
                 - type: REGEX
                   parameters:
@@ -70,6 +72,27 @@ zabbix_export:
           parameters:
             - name: config
               value: '{$PUSHIT.WEBCHECK.CONFIG}'
+          overrides:
+            - name: 'Enable http_status'
+              step: '1'
+              filter:
+                conditions:
+                  - macro: '{#TYPE}'
+                    value: ^http_status$
+              operations:
+                - operator: REGEXP
+                  value: '^HTTP status.*$'
+                  discover: DISCOVER
+            - name: 'Enable json_path'
+              step: '2'
+              filter:
+                conditions:
+                  - macro: '{#TYPE}'
+                    value: ^json_path$
+              operations:
+                - operator: REGEXP
+                  value: '^JSON path.*$'
+                  discover: DISCOVER
 
       macros:
         - macro: '{$PUSHIT.WEBCHECK.CONFIG}'
