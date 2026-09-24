@@ -8,6 +8,38 @@ zabbix_export:
       groups:
         - name: Templates
       discovery_rules:
+        - uuid: f5031f078c364bbe8729e85a5d58c36e
+          name: Certificate
+          type: SCRIPT
+          key: pushit.webcheck.discovery.certificate
+          delay: 10m
+          params: 'return JSON.parse(value).config'
+          filter:
+            conditions:
+              - macro: '{#TYPE}'
+                value: ^certificate$
+          lifetime_type: DELETE_IMMEDIATELY
+          description: 'Discovery rule for items based on x509 certificate data'
+          item_prototypes:
+            - uuid: 6881257e2c9641039824bc4dc526e486
+              name: 'Certificate data'
+              key: 'web.certificate.get["{#URL}"]'
+              delay: '{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}'
+              history: '0'
+              value_type: TEXT
+            - uuid: 26de9b6d37b84aa8b97c90eec51260c5
+              name: 'Certificate expiration'
+              type: DEPENDENT
+              key: 'pushit.webcheck.certificate.not_after[{#NAME}]'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.x509.not_after.timestamp
+              master_item:
+                key: 'web.certificate.get["{#URL}"]'
+          parameters:
+            - name: config
+              value: '{$PUSHIT.WEBCHECK.CONFIG}'
         - uuid: 9894a92ce16b4476a698cf55995d56ee
           name: HTTP
           type: SCRIPT
@@ -130,3 +162,8 @@ zabbix_export:
             Time expression for how long an absent http response (and thus JSON-path-selected value) is tolerated before
             the JSON-path-selected value is considered not matching the expected value. This should be higher than
             PUSHIT.WEBCHECK.HTTP.INTERVAL or it will not have any effect.
+        - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}'
+          value: 15m
+          description: |
+            Controls the interval in which certificate data is fetched for the endpoint. This is used for
+            TYPE = certificate.

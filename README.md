@@ -36,6 +36,14 @@ This macro controls how long "no data" is tolerated on HTTP status checks before
 
 This macro controls how long "no data" is tolerated on JSON path checks before it is considered a problem.
 
+### {$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}
+
+- Format: Zabbix time expression
+- Example: `15m`
+
+This macro controls the interval in which the x509 certificate data is retrieved. This item is used as source for checks
+of TYPE certificate.
+
 
 ## Endpoints configuration
 
@@ -71,5 +79,15 @@ The endpoint is fetched and the HTTP status code is evaluated. If the status cod
 
 The endpoint is fetched and a single field in the response body is selected with the JSON path expression. If the
 selected value does not match the value in `{#EXPECT_VALUE}`, a problem of HIGH severity is raised.
+
+#### certificate
+
+##### Additional keys
+
+- None
+
+##### Description
+
+The certificate used by the endpoint is fetched and evaluated.
 
 [Zabbix LLD]: https://www.zabbix.com/documentation/current/en/manual/discovery/low_level_discovery
