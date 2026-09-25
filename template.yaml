@@ -189,6 +189,24 @@ zabbix_export:
                   discover: DISCOVER
 
       macros:
+        - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}'
+          value: 90m
+          description: |
+            How long the history of the certificate data collection (raw, JSON data) is kept. This does not affect the
+            actual checks (validity, days remaining...), only the raw data. This value should be larger than
+            PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL and must be larger than PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE.
+        - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}'
+          value: 15m
+          description: |
+            Controls the interval in which certificate data is fetched for the endpoint. This is used for
+            TYPE = certificate.
+        - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE}'
+          value: 30m
+          description: |
+            Time expression for how long absent certificate data is tolerated before a problem of HIGH severity is
+            raised. This should be higher than PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL or it will not have any effect.
+            If you raise this value, you should review the value of PUSHIT.WEBCHECK.CERTIFICATE.HISTORY and its
+            description outlining constraints applying to it.
         - macro: '{$PUSHIT.WEBCHECK.CONFIG}'
           value: '[]'
           description: |
@@ -212,21 +230,3 @@ zabbix_export:
             Time expression for how long an absent http response (and thus JSON-path-selected value) is tolerated before
             the JSON-path-selected value is considered not matching the expected value. This should be higher than
             PUSHIT.WEBCHECK.HTTP.INTERVAL or it will not have any effect.
-        - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}'
-          value: 15m
-          description: |
-            Controls the interval in which certificate data is fetched for the endpoint. This is used for
-            TYPE = certificate.
-        - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}'
-          value: 90m
-          description: |
-            How long the history of the certificate data collection (raw, JSON data) is kept. This does not affect the
-            actual checks (validity, days remaining...), only the raw data. This value should be larger than
-            PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL and must be larger than PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE.
-        - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE}'
-          value: 30m
-          description: |
-            Time expression for how long absent certificate data is tolerated before a problem of HIGH severity is
-            raised. This should be higher than PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL or it will not have any effect.
-            If you raise this value, you should review the value of PUSHIT.WEBCHECK.CERTIFICATE.HISTORY and its
-            description outlining constraints applying to it.
