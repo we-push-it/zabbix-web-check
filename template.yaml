@@ -22,7 +22,7 @@ zabbix_export:
           description: 'Discovery rule for items based on x509 certificate data'
           item_prototypes:
             - uuid: 6881257e2c9641039824bc4dc526e486
-              name: 'Certificate data'
+              name: 'Certificate data {#NAME}'
               key: 'web.certificate.get["{#URL}"]'
               delay: '{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}'
               history: '{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}'
@@ -31,10 +31,10 @@ zabbix_export:
                 - uuid: dd2d82fb9d1546808da3a26546c69fe5
                   expression: |
                     nodata(/PUSH IT Webcheck/web.certificate.get["{#URL}"],{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE})=1
-                  name: 'Certificate data is unavailable'
+                  name: 'Certificate data for {#NAME} is unavailable'
                   priority: INFO
             - uuid: 26de9b6d37b84aa8b97c90eec51260c5
-              name: 'Certificate expiration'
+              name: 'Certificate expiration {#NAME}'
               type: DEPENDENT
               key: 'pushit.webcheck.certificate.not_after[{#NAME}]'
               preprocessing:
@@ -44,7 +44,7 @@ zabbix_export:
               master_item:
                 key: 'web.certificate.get["{#URL}"]'
             - uuid: b349b916eefa49cca172afb02e7fe211
-              name: 'Certificate validity'
+              name: 'Certificate validity {#NAME}'
               type: DEPENDENT
               key: 'pushit.webcheck.certificate.is_valid[{#NAME}]'
               value_type: TEXT
@@ -57,10 +57,10 @@ zabbix_export:
               trigger_prototypes:
                 - uuid: 654d5ceb41a74e20b6d5725505a42db7
                   expression: 'last(/PUSH IT Webcheck/pushit.webcheck.certificate.is_valid[{#NAME}]) <> "valid"'
-                  name: 'Certificate is invalid'
+                  name: 'Certificate for {#NAME} is invalid'
                   priority: HIGH
             - uuid: d6bfcdbd070f4f5991e9eaaf3f561b85
-              name: 'Days until certificate expires'
+              name: 'Days until certificate expires ({#NAME})'
               type: CALCULATED
               key: 'pushit.webcheck.certificate.days_until_expiration[{#NAME}]'
               delay: 6h
@@ -71,17 +71,17 @@ zabbix_export:
                 - uuid: d48d334e56e34d33a43d2d95d82d4200
                   expression: |
                     last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_WARN_DAYS}
-                  name: 'Certificate will expire in {#CERT_WARN_DAYS} or less'
+                  name: 'Certificate for {#NAME} will expire in {#CERT_WARN_DAYS} or less'
                   priority: WARNING
                 - uuid: 1cc9cad76a92426383ab473e3c6df510
                   expression: |
                     last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_AVG_DAYS}
-                  name: 'Certificate will expire in {#CERT_AVG_DAYS} or less'
+                  name: 'Certificate for {#NAME} will expire in {#CERT_AVG_DAYS} or less'
                   priority: AVERAGE
                 - uuid: bed26a45d9ae43ecb186433ce69a33d1
                   expression: |
                     last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_HIGH_DAYS}
-                  name: 'Certificate will expire in {#CERT_HIGH_DAYS} or less'
+                  name: 'Certificate for {#NAME} will expire in {#CERT_HIGH_DAYS} or less'
                   priority: HIGH
                   description: |
                     The certificate for {#URL} will expire in {#CERT_HIGH_DAYS} or less. Immediate action required or
@@ -129,7 +129,7 @@ zabbix_export:
                     nodata(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}],{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE})=1
                     or
                     last(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}])<>{#EXPECT_STATUS}
-                  name: 'Unexpected status code'
+                  name: 'Unexpected status code for {#NAME}'
                   priority: HIGH
                   description: |
                     The status code of the monitored service does not match the expected status {#EXPECT_STATUS} code or
@@ -156,7 +156,7 @@ zabbix_export:
                     nodata(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}],{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE})=1
                     or
                     last(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}])<>"{#EXPECT_VALUE}"
-                  name: 'Unexpected JSON value'
+                  name: 'Unexpected JSON value for {#NAME}'
                   priority: HIGH
                   description: |
                     The value at "{#JSON_PATH}" in the response of the monitored service does not match the expected
