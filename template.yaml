@@ -25,8 +25,14 @@ zabbix_export:
               name: 'Certificate data'
               key: 'web.certificate.get["{#URL}"]'
               delay: '{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}'
-              history: '0'
+              history: '{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}'
               value_type: TEXT
+              trigger_prototypes:
+                - uuid: dd2d82fb9d1546808da3a26546c69fe5
+                  expression: |
+                    nodata(/PUSH IT Webcheck/web.certificate.get["{#URL}"],{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE})=1
+                  name: 'Certificate data is unavailable'
+                  priority: INFO
             - uuid: 26de9b6d37b84aa8b97c90eec51260c5
               name: 'Certificate expiration'
               type: DEPENDENT
@@ -62,11 +68,6 @@ zabbix_export:
               units: days
               params: 'round((last(//pushit.webcheck.certificate.not_after[{#NAME}]) - now()) / 86400, 1)'
               trigger_prototypes:
-                - uuid: dd2d82fb9d1546808da3a26546c69fe5
-                  expression: |
-                    nodata(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}],{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE})=1
-                  name: 'Certificate data is unavailable'
-                  priority: INFO
                 - uuid: d48d334e56e34d33a43d2d95d82d4200
                   expression: |
                     last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_WARN_DAYS}
@@ -215,8 +216,16 @@ zabbix_export:
           description: |
             Controls the interval in which certificate data is fetched for the endpoint. This is used for
             TYPE = certificate.
+        - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}'
+          value: 90m
+          description: |
+            How long the history of the certificate data collection (raw, JSON data) is kept. This does not affect the
+            actual checks (validity, days remaining...), only the raw data. This value should be larger than
+            PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL and must be larger than PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE.
         - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE}'
           value: 30m
           description: |
             Time expression for how long absent certificate data is tolerated before a problem of HIGH severity is
             raised. This should be higher than PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL or it will not have any effect.
+            If you raise this value, you should review the value of PUSHIT.WEBCHECK.CERTIFICATE.HISTORY and its
+            description outlining constraints applying to it.
