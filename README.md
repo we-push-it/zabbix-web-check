@@ -44,6 +44,12 @@ This macro controls how long "no data" is tolerated on JSON path checks before i
 This macro controls the interval in which the x509 certificate data is retrieved. This item is used as source for checks
 of TYPE certificate.
 
+### {$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE}
+
+- Format: Zabbix time expression
+- Example: `30m`
+
+This macro controls how long "no data" is tolerated on certificate checks before it is considered a problem.
 
 ## Endpoints configuration
 
@@ -84,10 +90,14 @@ selected value does not match the value in `{#EXPECT_VALUE}`, a problem of HIGH 
 
 ##### Additional keys
 
-- None
+- `{#CERT_WARN_DAYS}`: integer, number of days
+- `{#CERT_AVG_DAYS}`: integer, number of days
+- `{#CERT_HIGH_DAYS}`: integer, number of days
 
 ##### Description
 
-The certificate used by the endpoint is fetched and evaluated.
+The certificate used by the endpoint is fetched and evaluated. Once a certificate has `{#CERT_WARN_DAYS}` days or less
+left, a WARNING level problem is raised. Two more problems at `{#CERT_AVG_DAYS}` and `{#CERT_HIGH_DAYS}` will be raised
+at AVERAGE and HIGH level respectively.
 
 [Zabbix LLD]: https://www.zabbix.com/documentation/current/en/manual/discovery/low_level_discovery

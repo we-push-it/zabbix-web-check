@@ -45,6 +45,30 @@ zabbix_export:
               value_type: FLOAT
               units: days
               params: 'round((last(//pushit.webcheck.certificate.not_after[{#NAME}]) - now()) / 86400, 1)'
+              trigger_prototypes:
+                - uuid: dd2d82fb9d1546808da3a26546c69fe5
+                  expression: |
+                    nodata(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}],{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE})=1
+                  name: 'Certificate data is unavailable'
+                  priority: INFO
+                - uuid: d48d334e56e34d33a43d2d95d82d4200
+                  expression: |
+                    last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_WARN_DAYS}
+                  name: 'Certificate will expire in {#CERT_WARN_DAYS} or less'
+                  priority: WARNING
+                - uuid: 1cc9cad76a92426383ab473e3c6df510
+                  expression: |
+                    last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_AVG_DAYS}
+                  name: 'Certificate will expire in {#CERT_AVG_DAYS} or less'
+                  priority: AVERAGE
+                - uuid: bed26a45d9ae43ecb186433ce69a33d1
+                  expression: |
+                    last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_HIGH_DAYS}
+                  name: 'Certificate will expire in {#CERT_HIGH_DAYS} or less'
+                  priority: HIGH
+                  description: |
+                    The certificate for {#URL} will expire in {#CERT_HIGH_DAYS} or less. Immediate action required or
+                    the monitored application will become unavailable.
           parameters:
             - name: config
               value: '{$PUSHIT.WEBCHECK.CONFIG}'
@@ -175,3 +199,8 @@ zabbix_export:
           description: |
             Controls the interval in which certificate data is fetched for the endpoint. This is used for
             TYPE = certificate.
+        - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE}'
+          value: 30m
+          description: |
+            Time expression for how long absent certificate data is tolerated before a problem of HIGH severity is
+            raised. This should be higher than PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL or it will not have any effect.
