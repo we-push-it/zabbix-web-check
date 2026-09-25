@@ -37,6 +37,22 @@ zabbix_export:
                     - $.x509.not_after.timestamp
               master_item:
                 key: 'web.certificate.get["{#URL}"]'
+            - uuid: b349b916eefa49cca172afb02e7fe211
+              name: 'Certificate validity'
+              type: DEPENDENT
+              key: 'pushit.webcheck.certificate.is_valid[{#NAME}]'
+              value_type: TEXT
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.result.value
+              master_item:
+                key: 'web.certificate.get["{#URL}"]'
+              trigger_prototypes:
+                - uuid: 654d5ceb41a74e20b6d5725505a42db7
+                  expression: 'last(/PUSH IT Webcheck/pushit.webcheck.certificate.is_valid[{#NAME}]) <> "valid"'
+                  name: 'Certificate is invalid'
+                  priority: HIGH
             - uuid: d6bfcdbd070f4f5991e9eaaf3f561b85
               name: 'Days until certificate expires'
               type: CALCULATED
