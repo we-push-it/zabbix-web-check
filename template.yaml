@@ -110,7 +110,7 @@ zabbix_export:
               name: 'Response {#NAME}'
               key: 'web.page.get["{#URL}"]'
               delay: '{$PUSHIT.WEBCHECK.HTTP.INTERVAL}'
-              history: '0'
+              history: '{$PUSHIT.WEBCHECK.HTTP.INTERVAL}'
               value_type: TEXT
             - uuid: d62950d3aa92463e982e4a8ea60c4169
               name: 'HTTP status {#NAME}'
