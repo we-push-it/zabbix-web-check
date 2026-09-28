@@ -97,9 +97,9 @@ flowchart LR
 Step by step:
 
 1. **Configuration.** Every endpoint is one JSON object in the host macro `{$PUSHIT.WEBCHECK.CONFIG}`. Its keys are
-   LLD macros such as `{#NAME}`, `{#URL}` and `{#TYPE}`.
+   LLD macros such as `{#NAME}`, `{#URL}` and `{#TYPES}`.
 2. **Discovery.** Both rules run every 10 minutes and receive the macro through the script parameter `config`. A
-   filter on `{#TYPE}` decides which rule handles an entry: **HTTP** takes `http_status` and `json_path`,
+   filter on `{#TYPES}` decides which rule handles an entry: **HTTP** takes `http_status` and `json_path`,
    **Certificate** takes `certificate`. Anything else is ignored.
 3. **Raw items.** Each entry gets one Zabbix agent item that talks to the endpoint: `web.page.get["{#URL}"]` for
    HTTP entries, `web.certificate.get["{#URL}"]` for certificate entries.
@@ -141,7 +141,7 @@ From download to the first problem in Zabbix in six steps.
    first test, a single HTTP status check is enough (adjust the host, port and path):
 
    ```json
-   [{"{#NAME}":"app","{#TYPE}":"http_status","{#URL}":"http://localhost:8080/health","{#EXPECT_STATUS}":"200"}]
+   [{"{#NAME}":"app","{#TYPES}":"http_status","{#URL}":"http://localhost:8080/health","{#EXPECT_STATUS}":"200"}]
    ```
 
    Click **Update**.
@@ -159,7 +159,7 @@ macro follows the same path: edit the value, then wait for the next discovery ru
 ## 🧩 Endpoint configuration
 
 `{$PUSHIT.WEBCHECK.CONFIG}` holds a JSON array in [Zabbix LLD] format. Each element describes one check as an object
-whose keys are LLD macros. Three keys are common to all checks; the value of `{#TYPE}` decides which additional keys
+whose keys are LLD macros. Three keys are common to all checks; the value of `{#TYPES}` decides which additional keys
 are needed.
 
 > **Write every value as a JSON string**: `"200"` rather than `200`, `"true"` rather than `true`. Strings are always
@@ -171,8 +171,8 @@ are needed.
 | Key | Description |
 |---|---|
 | `{#NAME}` | Unique name of the check on this host. It is used unquoted inside item keys such as `pushit.webcheck.http.status[{#NAME}]` and appears in item and trigger names, so use only letters, digits, `_`, `-` and `.`; no spaces, commas, brackets or quotes. |
-| `{#URL}` | The endpoint as `scheme://host[:port][/path]`. The default port of the scheme and the root path apply when omitted. Must be unique among the `http_status` and `json_path` entries of the host, and unique among its `certificate` entries; see [example 5](#5-same-endpoint-two-checks). |
-| `{#TYPE}` | `http_status`, `json_path` or `certificate`. Any other value matches no discovery rule and the entry is silently skipped. |
+| `{#URL}` | The endpoint as `scheme://host[:port][/path]`. The default port of the scheme and the root path apply when omitted. |
+| `{#TYPES}` | A comma-separated list of checks to run. Allowed items: `http_status`, `json_path` or `certificate`. Any other item in the list will be ignored. |
 
 ### `http_status`
 
@@ -188,7 +188,7 @@ compares the status code from the first line of the response. The body is not ev
 
 Fetches the URL every `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` (default `1m`) with the same `web.page.get` item, drops
 the response headers, treats the body as JSON and compares one value in it. The status code is not evaluated by this
-type; add an `http_status` entry if you need both, see [example 5](#5-same-endpoint-two-checks).
+type; add `http_status` to `{#TYPES}` if you need both.
 
 | Key | Description |
 |---|---|
@@ -214,7 +214,7 @@ Choose the thresholds so that WARN > AVG > HIGH, for example `"30"`, `"14"` and 
 
 Every example is a complete, valid value for `{$PUSHIT.WEBCHECK.CONFIG}` and follows the rules from
 [Endpoint configuration](#-endpoint-configuration): every value is a JSON string, every `{#NAME}` is unique on the
-host, and every `{#URL}` is unique within its group (see [example 5](#5-same-endpoint-two-checks)).
+host.
 
 The examples are pretty-printed for readability. In the macro value the same JSON is usually pasted as one line, as
 shown in the [compact form](#compact-form) at the end of this section. Whitespace is irrelevant to JSON but counts
@@ -228,7 +228,7 @@ A single service on port 8080 whose health endpoint must answer `200`.
 [
   {
     "{#NAME}": "app",
-    "{#TYPE}": "http_status",
+    "{#TYPES}": "http_status",
     "{#URL}": "http://localhost:8080/health",
     "{#EXPECT_STATUS}": "200"
   }
@@ -252,7 +252,7 @@ Any status code works as expectation. An endpoint behind authentication, for exa
 [
   {
     "{#NAME}": "admin-login",
-    "{#TYPE}": "http_status",
+    "{#TYPES}": "http_status",
     "{#URL}": "http://localhost:9000/admin",
     "{#EXPECT_STATUS}": "401"
   }
@@ -270,21 +270,21 @@ endpoints must answer without authentication.
 [
   {
     "{#NAME}": "shop-api",
-    "{#TYPE}": "json_path",
+    "{#TYPES}": "json_path",
     "{#URL}": "http://localhost:8080/actuator/health",
     "{#JSON_PATH}": "$.status",
     "{#EXPECT_VALUE}": "UP"
   },
   {
     "{#NAME}": "search",
-    "{#TYPE}": "json_path",
+    "{#TYPES}": "json_path",
     "{#URL}": "http://localhost:9200/_cluster/health",
     "{#JSON_PATH}": "$.status",
     "{#EXPECT_VALUE}": "green"
   },
   {
     "{#NAME}": "worker",
-    "{#TYPE}": "json_path",
+    "{#TYPES}": "json_path",
     "{#URL}": "http://localhost:3000/healthz",
     "{#JSON_PATH}": "$.ready",
     "{#EXPECT_VALUE}": "true"
@@ -311,7 +311,7 @@ Warn 30 days before the certificate expires, escalate to AVERAGE at 14 days and 
 [
   {
     "{#NAME}": "www-cert",
-    "{#TYPE}": "certificate",
+    "{#TYPES}": "certificate",
     "{#URL}": "https://www.example.com",
     "{#CERT_WARN_DAYS}": "30",
     "{#CERT_AVG_DAYS}": "14",
@@ -340,7 +340,7 @@ certificate was issued for (here `www.example.com`), not `localhost`, otherwise 
 ### 4. A realistic host: several services, all three types
 
 A shop server. The public storefront is checked through its own name, once for the status code and once for the
-certificate: the same URL may appear once in the HTTP group and once in the certificate group. Two Spring Boot
+certificate. Two Spring Boot
 services answer with JSON health, a protected admin interface is expected to answer `401` without credentials, and
 an API on port 8443 has a certificate of its own. `billing-db` reads a component status, which Actuator only includes
 when `management.endpoint.health.show-components` or `show-details` is set to `always` (`when-authorized` does not
@@ -350,13 +350,13 @@ help, the agent sends no credentials).
 [
   {
     "{#NAME}": "shop-frontend",
-    "{#TYPE}": "http_status",
+    "{#TYPES}": "http_status",
     "{#URL}": "https://shop.example.com/",
     "{#EXPECT_STATUS}": "200"
   },
   {
     "{#NAME}": "shop-cert",
-    "{#TYPE}": "certificate",
+    "{#TYPES}": "certificate",
     "{#URL}": "https://shop.example.com/",
     "{#CERT_WARN_DAYS}": "30",
     "{#CERT_AVG_DAYS}": "14",
@@ -364,27 +364,27 @@ help, the agent sends no credentials).
   },
   {
     "{#NAME}": "orders-api",
-    "{#TYPE}": "json_path",
+    "{#TYPES}": "json_path",
     "{#URL}": "http://localhost:8080/actuator/health",
     "{#JSON_PATH}": "$.status",
     "{#EXPECT_VALUE}": "UP"
   },
   {
     "{#NAME}": "billing-db",
-    "{#TYPE}": "json_path",
+    "{#TYPES}": "json_path",
     "{#URL}": "http://localhost:8081/actuator/health",
     "{#JSON_PATH}": "$.components.db.status",
     "{#EXPECT_VALUE}": "UP"
   },
   {
     "{#NAME}": "admin-auth",
-    "{#TYPE}": "http_status",
+    "{#TYPES}": "http_status",
     "{#URL}": "http://localhost:9000/admin/",
     "{#EXPECT_STATUS}": "401"
   },
   {
     "{#NAME}": "api-cert",
-    "{#TYPE}": "certificate",
+    "{#TYPES}": "certificate",
     "{#URL}": "https://api.example.com:8443",
     "{#CERT_WARN_DAYS}": "21",
     "{#CERT_AVG_DAYS}": "10",
@@ -393,34 +393,23 @@ help, the agent sends no credentials).
 ]
 ```
 
-### 5. Same endpoint, two checks
+### 5. Two checks for the same endpoint
 
-Both `http_status` and `json_path` entries create the raw item `web.page.get["{#URL}"]`, and item keys must be
-unique per host. To check the status code *and* a JSON value of the same endpoint, make the two URLs differ. A
-query string that the service ignores does the job; a trailing slash on one of them works as well when the server
-treats both paths alike.
+You can specify multiple checks in `{#TYPES}` as comma-separated list. The following example checks whether the endpoint
+returns an HTTP 200 status code and whether the field `$.status` holds the value `"UP"`.
 
 ```json
 [
   {
     "{#NAME}": "payments-status",
-    "{#TYPE}": "http_status",
-    "{#URL}": "http://localhost:8080/actuator/health?check=status",
-    "{#EXPECT_STATUS}": "200"
-  },
-  {
-    "{#NAME}": "payments-health",
-    "{#TYPE}": "json_path",
-    "{#URL}": "http://localhost:8080/actuator/health?check=json",
+    "{#TYPES}": "http_status,json_path",
+    "{#URL}": "http://localhost:8080/actuator/health",
+    "{#EXPECT_STATUS}": "200",
     "{#JSON_PATH}": "$.status",
     "{#EXPECT_VALUE}": "UP"
   }
 ]
 ```
-
-The endpoint is requested twice per interval, once per entry. The same rule applies among `certificate` entries
-(`web.certificate.get["{#URL}"]`); a URL may however appear once in the HTTP group and once in the certificate
-group, as `shop-frontend` and `shop-cert` do in example 4.
 
 ### Compact form
 
@@ -428,7 +417,7 @@ The macro value is the same JSON without line breaks and indentation. This is
 [example 4](#4-a-realistic-host-several-services-all-three-types) exactly as it goes into the macro field:
 
 ```json
-[{"{#NAME}":"shop-frontend","{#TYPE}":"http_status","{#URL}":"https://shop.example.com/","{#EXPECT_STATUS}":"200"},{"{#NAME}":"shop-cert","{#TYPE}":"certificate","{#URL}":"https://shop.example.com/","{#CERT_WARN_DAYS}":"30","{#CERT_AVG_DAYS}":"14","{#CERT_HIGH_DAYS}":"7"},{"{#NAME}":"orders-api","{#TYPE}":"json_path","{#URL}":"http://localhost:8080/actuator/health","{#JSON_PATH}":"$.status","{#EXPECT_VALUE}":"UP"},{"{#NAME}":"billing-db","{#TYPE}":"json_path","{#URL}":"http://localhost:8081/actuator/health","{#JSON_PATH}":"$.components.db.status","{#EXPECT_VALUE}":"UP"},{"{#NAME}":"admin-auth","{#TYPE}":"http_status","{#URL}":"http://localhost:9000/admin/","{#EXPECT_STATUS}":"401"},{"{#NAME}":"api-cert","{#TYPE}":"certificate","{#URL}":"https://api.example.com:8443","{#CERT_WARN_DAYS}":"21","{#CERT_AVG_DAYS}":"10","{#CERT_HIGH_DAYS}":"3"}]
+[{"{#NAME}":"shop-frontend","{#TYPES}":"http_status","{#URL}":"https://shop.example.com/","{#EXPECT_STATUS}":"200"},{"{#NAME}":"shop-cert","{#TYPES}":"certificate","{#URL}":"https://shop.example.com/","{#CERT_WARN_DAYS}":"30","{#CERT_AVG_DAYS}":"14","{#CERT_HIGH_DAYS}":"7"},{"{#NAME}":"orders-api","{#TYPES}":"json_path","{#URL}":"http://localhost:8080/actuator/health","{#JSON_PATH}":"$.status","{#EXPECT_VALUE}":"UP"},{"{#NAME}":"billing-db","{#TYPES}":"json_path","{#URL}":"http://localhost:8081/actuator/health","{#JSON_PATH}":"$.components.db.status","{#EXPECT_VALUE}":"UP"},{"{#NAME}":"admin-auth","{#TYPES}":"http_status","{#URL}":"http://localhost:9000/admin/","{#EXPECT_STATUS}":"401"},{"{#NAME}":"api-cert","{#TYPES}":"certificate","{#URL}":"https://api.example.com:8443","{#CERT_WARN_DAYS}":"21","{#CERT_AVG_DAYS}":"10","{#CERT_HIGH_DAYS}":"3"}]
 ```
 
 You can use `jq` to produce the compact form from a pretty-printed file and if you chain it with `wc`, you can count the
@@ -481,8 +470,8 @@ collide and are easy to tell apart in *Latest data* and *Problems*.
 
 | Discovery rule | Key | Type | Runs | Accepts entries with | Lost resources |
 |---|---|---|---|---|---|
-| **HTTP** | `pushit.webcheck.discovery.http` | Script | every 10m | `{#TYPE}` matching `^http_status$` or `^json_path$` | Delete immediately |
-| **Certificate** | `pushit.webcheck.discovery.certificate` | Script | every 10m | `{#TYPE}` matching `^certificate$` | Delete immediately |
+| **HTTP** | `pushit.webcheck.discovery.http` | Script | every 10m | `{#TYPES}` containing `http_status` or `json_path` | Delete immediately |
+| **Certificate** | `pushit.webcheck.discovery.certificate` | Script | every 10m | `{#TYPES}` containing `certificate` | Delete immediately |
 
 Both rules receive `{$PUSHIT.WEBCHECK.CONFIG}` as the script parameter `config` and return the value of
 `JSON.parse(value).config`.
@@ -492,8 +481,8 @@ with an override, so each HTTP entry ends up with the raw item plus exactly one 
 
 | Override | Condition | Effect |
 |---|---|---|
-| Enable http_status | `{#TYPE}` matches `^http_status$` | Item prototypes whose name matches `^HTTP status.*$` are discovered |
-| Enable json_path | `{#TYPE}` matches `^json_path$` | Item prototypes whose name matches `^JSON path.*$` are discovered |
+| Enable http_status | `{#TYPES}` contains `http_status` | Item prototypes whose name matches `^HTTP status.*$` are discovered |
+| Enable json_path | `{#TYPES}` cotnains `json_path` | Item prototypes whose name matches `^JSON path.*$` are discovered |
 
 <details>
 <summary><strong>http_status</strong>: items and triggers</summary>
@@ -561,9 +550,6 @@ in problem state.
 
 ## 💡 Tips and gotchas
 
-- **One URL per entry within a rule.** Two `http_status`/`json_path` entries, or two `certificate` entries, cannot
-  share a URL because the raw item key contains it. [Example 5](#5-same-endpoint-two-checks) shows the query string
-  trick.
 - **Renaming an entry recreates it.** `{#NAME}` is part of the item keys, so a renamed entry produces new items and
   triggers and deletes the old ones (including their history).
 - **Plain requests from the agent.** `web.page.get` and `web.certificate.get` send unauthenticated requests without
@@ -585,7 +571,7 @@ in problem state.
   list of the host and click *Disable* instead of removing it from the macro.
 - **Invalid JSON stops discovery.** If the macro is not valid JSON, both discovery rules turn *Not supported* with
   the parse error shown in the rule status. Existing items stay as they are until the macro is fixed.
-- **Unknown `{#TYPE}` values are ignored.** A typo such as `http-status` matches neither rule and produces no items,
+- **Unknown values in `{#TYPES}` are ignored.** A typo such as `http-status` matches neither rule and produces no items,
   no triggers and no error. Check the *Items* and *Latest data* views after adding an entry and executing the discovery
   rule.
 - **The macro value is limited to 2048 characters.** Keep the JSON compact and the names and URLs short. Depending

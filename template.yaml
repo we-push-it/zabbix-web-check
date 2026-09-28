@@ -17,8 +17,8 @@ zabbix_export:
           params: 'return JSON.parse(value).config'
           filter:
             conditions:
-              - macro: '{#TYPE}'
-                value: ^certificate$
+              - macro: '{#TYPES}'
+                value: ^(.+,)*certificate(,.+)*$
           lifetime_type: DELETE_IMMEDIATELY
           description: 'Discovery rule for items based on x509 certificate data'
           item_prototypes:
@@ -99,10 +99,10 @@ zabbix_export:
           filter:
             evaltype: OR
             conditions:
-              - macro: '{#TYPE}'
-                value: ^http_status$
-              - macro: '{#TYPE}'
-                value: ^json_path$
+              - macro: '{#TYPES}'
+                value: ^(.+,)*http_status(,.+)*$
+              - macro: '{#TYPES}'
+                value: ^(.+,)*json_path(,.+)*$
           lifetime_type: DELETE_IMMEDIATELY
           description: 'Discovery rule for items based on an HTTP response from the endpoint'
           item_prototypes:
@@ -171,8 +171,8 @@ zabbix_export:
               step: '1'
               filter:
                 conditions:
-                  - macro: '{#TYPE}'
-                    value: ^http_status$
+                  - macro: '{#TYPES}'
+                    value: ^(.+,)*http_status(,.+)*$
               operations:
                 - operator: REGEXP
                   value: '^HTTP status.*$'
@@ -181,8 +181,8 @@ zabbix_export:
               step: '2'
               filter:
                 conditions:
-                  - macro: '{#TYPE}'
-                    value: ^json_path$
+                  - macro: '{#TYPES}'
+                    value: ^(.+,)*json_path(,.+)*$
               operations:
                 - operator: REGEXP
                   value: '^JSON path.*$'
