@@ -340,11 +340,10 @@ certificate was issued for (here `www.example.com`), not `localhost`, otherwise 
 ### 4. A realistic host: several services, all three types
 
 A shop server. The public storefront is checked through its own name, once for the status code and once for the
-certificate. Two Spring Boot
-services answer with JSON health, a protected admin interface is expected to answer `401` without credentials, and
-an API on port 8443 has a certificate of its own. `billing-db` reads a component status, which Actuator only includes
-when `management.endpoint.health.show-components` or `show-details` is set to `always` (`when-authorized` does not
-help, the agent sends no credentials).
+certificate. Two Spring Boot services answer with JSON health, a protected admin interface is expected to answer `401`
+without credentials, and an API on port 8443 has a certificate of its own. `billing-db` reads a component status,
+which Actuator only includes when `management.endpoint.health.show-components` or `show-details` is set to `always`
+(`when-authorized` does not help, the agent sends no credentials).
 
 ```json
 [
