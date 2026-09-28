@@ -14,11 +14,63 @@ zabbix_export:
           type: SCRIPT
           key: pushit.webcheck.discovery.certificate
           delay: 10m
-          params: 'return JSON.parse(value).config'
+          params: |-
+            function requireFields(data, fields, endpointName) {
+                for (var i in fields) {
+                    var fieldName = fields[i];
+                    if (data.hasOwnProperty(fieldName) === false) {
+                        throw 'Expected field "' + fieldName + '" to be set in endpoint config "' + endpointName + '"';
+                    }
+                }
+            }
+
+            var configData = JSON.parse(JSON.parse(value).config);
+            var output = [];
+
+            for (var key in configData) {
+                var item = configData[key];
+                requireFields(item, ["url"], key);
+                var checkTypes = [];
+                var outputItem = {
+                    "{#NAME}": key,
+                    "{#URL}": item.url
+                };
+
+                // http_status check
+                if (item.hasOwnProperty("expectStatus")) {
+                    checkTypes.push("http_status");
+                    outputItem["{#EXPECT_STATUS}"] = item.expectStatus;
+                }
+
+                // json_path check
+                if (item.hasOwnProperty("json")) {
+                    checkTypes.push("json_path");
+                    requireFields(item.json, ["path", "expect"], key);
+                    outputItem["{#JSON_PATH}"] = item.json.path;
+                    outputItem["{#EXPECT_VALUE}"] = item.json.expect;
+                }
+
+                // certificate check
+                if (item.hasOwnProperty("certificate")) {
+                    checkTypes.push("certificate");
+                    requireFields(item.certificate, ["warning", "average", "high"], key);
+                    outputItem["{#CERT_WARN_DAYS}"] = item.certificate.warning;
+                    outputItem["{#CERT_AVG_DAYS}"] = item.certificate.average;
+                    outputItem["{#CERT_HIGH_DAYS}"] = item.certificate.high;
+                }
+
+                if (checkTypes.length === 0) {
+                    throw "No valid check type "
+                }
+                outputItem["{#TYPES}"] = checkTypes.join(",");
+                output.push(outputItem);
+            }
+
+            return JSON.stringify(output);
           filter:
             conditions:
               - macro: '{#TYPES}'
-                value: ^(.+,)*certificate(,.+)*$
+                value: '^(.+,)*certificate(,.+)*$'
           lifetime_type: DELETE_IMMEDIATELY
           description: 'Discovery rule for items based on x509 certificate data'
           item_prototypes:
@@ -95,14 +147,66 @@ zabbix_export:
           type: SCRIPT
           key: pushit.webcheck.discovery.http
           delay: 10m
-          params: 'return JSON.parse(value).config;'
+          params: |-
+            function requireFields(data, fields, endpointName) {
+                for (var i in fields) {
+                    var fieldName = fields[i];
+                    if (data.hasOwnProperty(fieldName) === false) {
+                        throw 'Expected field "' + fieldName + '" to be set in endpoint config "' + endpointName + '"';
+                    }
+                }
+            }
+
+            var configData = JSON.parse(JSON.parse(value).config);
+            var output = [];
+
+            for (var key in configData) {
+                var item = configData[key];
+                requireFields(item, ["url"], key);
+                var checkTypes = [];
+                var outputItem = {
+                    "{#NAME}": key,
+                    "{#URL}": item.url
+                };
+
+                // http_status check
+                if (item.hasOwnProperty("expectStatus")) {
+                    checkTypes.push("http_status");
+                    outputItem["{#EXPECT_STATUS}"] = item.expectStatus;
+                }
+
+                // json_path check
+                if (item.hasOwnProperty("json")) {
+                    checkTypes.push("json_path");
+                    requireFields(item.json, ["path", "expect"], key);
+                    outputItem["{#JSON_PATH}"] = item.json.path;
+                    outputItem["{#EXPECT_VALUE}"] = item.json.expect;
+                }
+
+                // certificate check
+                if (item.hasOwnProperty("certificate")) {
+                    checkTypes.push("certificate");
+                    requireFields(item.certificate, ["warning", "average", "high"], key);
+                    outputItem["{#CERT_WARN_DAYS}"] = item.certificate.warning;
+                    outputItem["{#CERT_AVG_DAYS}"] = item.certificate.average;
+                    outputItem["{#CERT_HIGH_DAYS}"] = item.certificate.high;
+                }
+
+                if (checkTypes.length === 0) {
+                    throw "No valid check type "
+                }
+                outputItem["{#TYPES}"] = checkTypes.join(",");
+                output.push(outputItem);
+            }
+
+            return JSON.stringify(output);
           filter:
             evaltype: OR
             conditions:
               - macro: '{#TYPES}'
-                value: ^(.+,)*http_status(,.+)*$
+                value: '^(.+,)*http_status(,.+)*$'
               - macro: '{#TYPES}'
-                value: ^(.+,)*json_path(,.+)*$
+                value: '^(.+,)*json_path(,.+)*$'
           lifetime_type: DELETE_IMMEDIATELY
           description: 'Discovery rule for items based on an HTTP response from the endpoint'
           item_prototypes:
@@ -172,7 +276,7 @@ zabbix_export:
               filter:
                 conditions:
                   - macro: '{#TYPES}'
-                    value: ^(.+,)*http_status(,.+)*$
+                    value: '^(.+,)*http_status(,.+)*$'
               operations:
                 - operator: REGEXP
                   value: '^HTTP status.*$'
@@ -182,7 +286,7 @@ zabbix_export:
               filter:
                 conditions:
                   - macro: '{#TYPES}'
-                    value: ^(.+,)*json_path(,.+)*$
+                    value: '^(.+,)*json_path(,.+)*$'
               operations:
                 - operator: REGEXP
                   value: '^JSON path.*$'
@@ -198,8 +302,8 @@ zabbix_export:
         - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}'
           value: 15m
           description: |
-            Controls the interval in which certificate data is fetched for the endpoint. This is used for
-            TYPE = certificate.
+            Controls the interval in which certificate data is fetched for the endpoint. This is used for Certificate
+            checks.
         - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE}'
           value: 30m
           description: |
@@ -208,7 +312,7 @@ zabbix_export:
             If you raise this value, you should review the value of PUSHIT.WEBCHECK.CERTIFICATE.HISTORY and its
             description outlining constraints applying to it.
         - macro: '{$PUSHIT.WEBCHECK.CONFIG}'
-          value: '[]'
+          value: '{}'
           description: |
             Configuration for endpoints to check, see
             [README](https://github.com/we-push-it/zabbix-web-check/blob/master/README.md) for complete documentation
@@ -216,8 +320,8 @@ zabbix_export:
         - macro: '{$PUSHIT.WEBCHECK.HTTP.INTERVAL}'
           value: 1m
           description: |
-            Controls the interval in which the HTTP endpoint is called. This is used for TYPE = http_status and
-            TYPE = json_path.
+            Controls the interval in which the HTTP endpoint is called. This is used for HTTP Status and JSONPath
+            checks.
         - macro: '{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}'
           value: 3m
           description: |

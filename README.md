@@ -12,7 +12,7 @@
 </p>
 
 **PUSH IT Webcheck** is a Zabbix template for hosts that run web services. Describe the endpoints of a host as a
-JSON list in the macro `{$PUSHIT.WEBCHECK.CONFIG}`, link the template, and low-level discovery creates the items and
+JSON object in the macro `{$PUSHIT.WEBCHECK.CONFIG}`, link the template, and low-level discovery creates the items and
 triggers for HTTP status codes, for values inside JSON health responses and for TLS certificate validity and expiry.
 All requests are made by the Zabbix agent on the monitored host itself: `http://localhost:8080/health` means port
 8080 on that machine, not on the Zabbix server, so a service bound to `localhost` or to an internal port is as easy
@@ -33,8 +33,7 @@ to check as a public one.
 
 ## ✨ Features
 
-- 🩺 **Three check types.** `http_status` compares the response status code, `json_path` compares one value inside a
-  JSON body, `certificate` watches TLS validity and expiry.
+- 🩺 **Three check types.** HTTP Status, JSONPath and Certificate.
 - 🧾 **One macro per host.** All endpoints live in `{$PUSHIT.WEBCHECK.CONFIG}`; no item cloning.
 - 🏠 **Runs where the service runs.** Checks are Zabbix agent items, so `http://localhost:8080/health` works without
   exposing anything.
@@ -52,11 +51,11 @@ endpoint list in `{$PUSHIT.WEBCHECK.CONFIG}` into items and triggers:
 
 ```mermaid
 flowchart LR
-    CFG(["Host macro<br/>{$PUSHIT.WEBCHECK.CONFIG}<br/>JSON array, one object per endpoint"])
+    CFG(["Host macro<br/>{$PUSHIT.WEBCHECK.CONFIG}<br/>JSON object, one named property per endpoint"])
 
     subgraph LLD ["Discovery rules, every 10m"]
-        DH["HTTP<br/>TYPE http_status or json_path"]
-        DC["Certificate<br/>TYPE certificate"]
+        DH["HTTP<br/>json or expectStatus top-level-key present"]
+        DC["Certificate<br/>certificate top-level-key present"]
     end
 
     subgraph HI ["HTTP items, every HTTP.INTERVAL"]
@@ -82,8 +81,8 @@ flowchart LR
 
     CFG --> DH & DC
     DH --> RAW
-    RAW -->|http_status| ST
-    RAW -->|json_path| JP
+    RAW -->|expectStatus present| ST
+    RAW -->|json present| JP
     DC --> CRAW
     CRAW --> NA & VAL
     NA --> DAYS
@@ -96,24 +95,20 @@ flowchart LR
 
 Step by step:
 
-1. **Configuration.** Every endpoint is one JSON object in the host macro `{$PUSHIT.WEBCHECK.CONFIG}`. Its keys are
-   LLD macros such as `{#NAME}`, `{#URL}` and `{#TYPES}`.
-2. **Discovery.** Both rules run every 10 minutes and receive the macro through the script parameter `config`. A
-   filter on `{#TYPES}` decides which rule handles an entry: **HTTP** takes `http_status` and `json_path`,
-   **Certificate** takes `certificate`. Anything else is ignored.
+1. **Configuration.** Every endpoint is one JSON object in the host macro `{$PUSHIT.WEBCHECK.CONFIG}`.
+2. **Discovery.** Both rules run every 10 minutes and receive the macro through the script parameter `config`.
 3. **Raw items.** Each entry gets one Zabbix agent item that talks to the endpoint: `web.page.get["{#URL}"]` for
-   HTTP entries, `web.certificate.get["{#URL}"]` for certificate entries.
+   HTTP status and JSON path entries, `web.certificate.get["{#URL}"]` for certificate entries.
 4. **Derived items.** Dependent items extract the interesting part with preprocessing (regular expression and
-   JSONPath). Two overrides in the HTTP rule make sure that only the dependent item matching the entry's type is
-   created. The certificate rule adds a calculated item that turns the `notAfter` timestamp into days.
-5. **Triggers.** Trigger prototypes compare the values with your expectations (`{#EXPECT_STATUS}`,
-   `{#EXPECT_VALUE}`, `{#CERT_*_DAYS}`) and also raise a problem when no value has arrived for longer than the
-   grace period.
+   JSONPath). Two overrides in the HTTP rule enable the dependent item prototypes corresponding to the checks configured
+   for the entry. The certificate rule adds a calculated item that turns the `notAfter` timestamp into days.
+5. **Triggers.** Trigger prototypes compare the values with your expectations and also raise a problem when no value has
+   arrived for longer than the grace period.
 6. **Cleanup.** Lost resources are deleted immediately: remove an entry from the macro and its items, triggers and
    history are gone after the next discovery run.
 
-Changes to the macro take effect on the next discovery run, at most 10 minutes later, or right away with
-**Execute now** on the two discovery rules.
+Changes to the macro take effect on the next discovery run, at most 10 minutes later, or right away with **Execute now**
+on the two discovery rules.
 
 ## 🚀 Quick start
 
@@ -141,7 +136,12 @@ From download to the first problem in Zabbix in six steps.
    first test, a single HTTP status check is enough (adjust the host, port and path):
 
    ```json
-   [{"{#NAME}":"app","{#TYPES}":"http_status","{#URL}":"http://localhost:8080/health","{#EXPECT_STATUS}":"200"}]
+   {
+     "app": {
+        "url": "http://localhost:8080/health",
+        "expectStatus": "200"
+     }
+   }
    ```
 
    Click **Update**.
@@ -158,63 +158,104 @@ macro follows the same path: edit the value, then wait for the next discovery ru
 
 ## 🧩 Endpoint configuration
 
-`{$PUSHIT.WEBCHECK.CONFIG}` holds a JSON array in [Zabbix LLD] format. Each element describes one check as an object
-whose keys are LLD macros. Three keys are common to all checks; the value of `{#TYPES}` decides which additional keys
-are needed.
-
-> **Write every value as a JSON string**: `"200"` rather than `200`, `"true"` rather than `true`. Strings are always
-> safe for low-level discovery, and this matches how the values are compared: status codes and day thresholds
-> numerically, JSON values as text.
+`{$PUSHIT.WEBCHECK.CONFIG}` holds a JSON object. The keys of the root level object are human-readable names of the
+endpoints to monitor. Since these keys are used inside Zabbix keys, only letters, digits, `_`, `-` and `.` should be
+used; no spaces, commas, brackets or quotes. The values are objects describing the check(s). Every object needs at least
+the `url` key and additional keys enabling checks.
 
 ### Common keys
 
-| Key | Description |
-|---|---|
-| `{#NAME}` | Unique name of the check on this host. It is used unquoted inside item keys such as `pushit.webcheck.http.status[{#NAME}]` and appears in item and trigger names, so use only letters, digits, `_`, `-` and `.`; no spaces, commas, brackets or quotes. |
-| `{#URL}` | The endpoint as `scheme://host[:port][/path]`. The default port of the scheme and the root path apply when omitted. |
-| `{#TYPES}` | A comma-separated list of checks to run. Allowed items: `http_status`, `json_path` or `certificate`. Any other item in the list will be ignored. |
+The following configuration would be incomplete and not result in any items because it defines no checks. But it is a
+good start to learn how to structure the configuration.
 
-### `http_status`
-
-Fetches the URL every `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` (default `1m`) with the agent item
-[`web.page.get`](https://www.zabbix.com/documentation/current/en/manual/config/items/itemtypes/zabbix_agent) and
-compares the status code from the first line of the response. The body is not evaluated.
-
-| Key | Description |
-|---|---|
-| `{#EXPECT_STATUS}` | Expected status code, compared numerically. `"200"` for a plain health endpoint, but any code works, for example `"401"` for an endpoint that is supposed to demand authentication. Any other code raises **Unexpected status code for {#NAME}** (HIGH). |
-
-### `json_path`
-
-Fetches the URL every `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` (default `1m`) with the same `web.page.get` item, drops
-the response headers, treats the body as JSON and compares one value in it. The status code is not evaluated by this
-type; add `http_status` to `{#TYPES}` if you need both.
+```json
+{
+  "my-application": {
+    "url": "https://example.org"
+  }
+}
+```
 
 | Key | Description |
 |---|---|
-| `{#JSON_PATH}` | [Zabbix JSONPath] expression selecting the value, for example `$.status` or `$.components.db.status`. Use a definite path: an expression that returns a list yields a JSON array as text, which is hard to compare. |
-| `{#EXPECT_VALUE}` | Expected value, compared as a string. JSON strings arrive without quotes (`UP`), booleans and numbers as text (`true`, `200`). A mismatch raises **Unexpected JSON value for {#NAME}** (HIGH). |
+| `url` | The endpoint as `scheme://host[:port][/path]`. The default port of the scheme and the root path apply when omitted. |
 
-### `certificate`
+### Checking the HTTP status
 
-Opens a TLS connection every `{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}` (default `15m`) with the agent 2 item
+This check is enabled by setting `expectStatus`. It fetches the URL every `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` (default
+`1m`) with the agent item [`web.page.get`](https://www.zabbix.com/documentation/current/en/manual/config/items/itemtypes/zabbix_agent)
+and compares the status code from the first line of the response. The body is not evaluated.
+
+```json
+{
+  "my-application": {
+    "url": "https://example.org/",
+    "expectStatus": "200"
+  }
+}
+```
+
+| Key | Description |
+|---|---|
+| `expectStatus` | Expected status code, compared numerically. `"200"` for a plain health endpoint, but any code works, for example `"401"` for an endpoint that is supposed to demand authentication. Any other code raises **Unexpected status code for {#NAME}** (HIGH). |
+
+### Checking a specific field in JSON
+
+This check is enabled by setting `json`. Some status pages provide a machine-readable JSON version. You can use this
+check to query a specific field described by a [Zabbix JSONPath]. It fetches the URL every
+`{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` (default `1m`) with the same `web.page.get` item, treats the body as JSON and
+compares one value in it. The status code is not evaluated by this check.
+
+```json
+{
+  "my-application": {
+    "url": "https://example.org/health.json",
+    "json": {
+      "path": "$.status",
+      "expect": "healthy"
+    }
+  }
+}
+```
+
+| Key | Description |
+|---|---|
+| `path` | [Zabbix JSONPath] expression selecting the value, for example `$.status` or `$.components.db.status`. Use a definite path: an expression that returns a list yields a JSON array as text, which is hard to compare. |
+| `expect` | Expected value, compared as a string. JSON strings arrive without quotes (`UP`), booleans and numbers as text (`true`, `200`). A mismatch raises **Unexpected JSON value for {#NAME}** (HIGH). |
+
+### Checking a certificate
+
+Opens a TLS connection every `{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}` (default `15m`) with the Zabbix Agent 2 item
 [`web.certificate.get`](https://www.zabbix.com/documentation/current/en/manual/config/items/itemtypes/zabbix_agent/zabbix_agent2),
-validates the certificate chain for the host name in the URL and reads the expiry date.
-The URL must use the `https` scheme; a port is optional, a path is ignored. This type needs **Zabbix agent 2**.
+validates the certificate for the host name in the URL and reads the expiry date. At the time of writing (Zabbix Agent 2
+version 7.4.15), this check **does not consider certificate revocation lists**. A revoked certificate will show up as
+valid until it expires. This is a limitation of the `web.certificate.get` item.
+
+```json
+{
+  "my-application": {
+    "url": "https://example.org/",
+    "certificate": {
+      "warning": 30,
+      "average": 14,
+      "high": 7
+    }
+  }
+}
+```
 
 | Key | Description |
 |---|---|
-| `{#CERT_WARN_DAYS}` | Days before expiry at which a WARNING problem is raised. |
-| `{#CERT_AVG_DAYS}` | Days before expiry at which an AVERAGE problem is raised. |
-| `{#CERT_HIGH_DAYS}` | Days before expiry at which a HIGH problem is raised. |
+| `warning` | Days before expiry at which a WARNING problem is raised. |
+| `average` | Days before expiry at which an AVERAGE problem is raised. |
+| `high`    | Days before expiry at which a HIGH problem is raised. |
 
-Choose the thresholds so that WARN > AVG > HIGH, for example `"30"`, `"14"` and `"7"`.
+Choose the thresholds so that `warning` > `average` > `high`, for example `30`, `14` and `7`.
 
 ## 📋 Configuration examples
 
 Every example is a complete, valid value for `{$PUSHIT.WEBCHECK.CONFIG}` and follows the rules from
-[Endpoint configuration](#-endpoint-configuration): every value is a JSON string, every `{#NAME}` is unique on the
-host.
+[Endpoint configuration](#-endpoint-configuration).
 
 The examples are pretty-printed for readability. In the macro value the same JSON is usually pasted as one line, as
 shown in the [compact form](#compact-form) at the end of this section. Whitespace is irrelevant to JSON but counts
@@ -225,14 +266,12 @@ towards the 2048-character macro limit.
 A single service on port 8080 whose health endpoint must answer `200`.
 
 ```json
-[
-  {
-    "{#NAME}": "app",
-    "{#TYPES}": "http_status",
-    "{#URL}": "http://localhost:8080/health",
-    "{#EXPECT_STATUS}": "200"
+{
+  "app": {
+    "url": "http://localhost:8080/health",
+    "expectStatus": "200"
   }
-]
+}
 ```
 
 **What you get for `app`**
@@ -249,14 +288,12 @@ for 3 minutes, for example because the endpoint refuses connections.
 Any status code works as expectation. An endpoint behind authentication, for example, should answer `401`:
 
 ```json
-[
-  {
-    "{#NAME}": "admin-login",
-    "{#TYPES}": "http_status",
-    "{#URL}": "http://localhost:9000/admin",
-    "{#EXPECT_STATUS}": "401"
+{
+  "admin-login": {
+    "url": "http://localhost:8080/admin",
+    "expectStatus": "401"
   }
-]
+}
 ```
 
 ### 2. JSON health endpoints
@@ -267,57 +304,57 @@ third reads a boolean from a body like `{"ready":true}`, which is compared as th
 endpoints must answer without authentication.
 
 ```json
-[
-  {
-    "{#NAME}": "shop-api",
-    "{#TYPES}": "json_path",
-    "{#URL}": "http://localhost:8080/actuator/health",
-    "{#JSON_PATH}": "$.status",
-    "{#EXPECT_VALUE}": "UP"
+{
+  "shop-api": {
+    "url": "http://localhost:8080/actuator/health",
+    "json": {
+      "path": "$.status",
+      "expect": "UP"
+    }
   },
-  {
-    "{#NAME}": "search",
-    "{#TYPES}": "json_path",
-    "{#URL}": "http://localhost:9200/_cluster/health",
-    "{#JSON_PATH}": "$.status",
-    "{#EXPECT_VALUE}": "green"
+  "search": {
+    "url": "http://localhost:9200/_cluster/health",
+    "json": {
+      "path": "$.status",
+      "expect": "green"
+    }
   },
-  {
-    "{#NAME}": "worker",
-    "{#TYPES}": "json_path",
-    "{#URL}": "http://localhost:3000/healthz",
-    "{#JSON_PATH}": "$.ready",
-    "{#EXPECT_VALUE}": "true"
+  "worker": {
+    "url": "http://localhost:3000/healthz",
+    "json": {
+      "path": "$.ready",
+      "expect": "true"
+    }
   }
-]
+}
 ```
 
 **What you get for `shop-api`** (and the same set for `search` and `worker`)
 
 | Object | Name | Severity |
 |---|---|---|
-| Item | Response shop-api | – |
-| Item | JSON path shop-api | – |
-| Trigger | Unexpected JSON value for shop-api | HIGH |
+| Item | Response shop-api / search / worker| – |
+| Item | JSON path shop-api / search / worker | – |
+| Trigger | Unexpected JSON value for shop-api / search / worker | HIGH |
 
-The trigger fires when the selected value differs from `UP`, and also when no value has arrived for 3 minutes, for
-example because the service is down, the body is not JSON or the path does not match.
+The trigger fires when the selected value differs from `UP` / `green` / `true`, and also when no value has arrived for
+3 minutes, for example because the service is down, the body is not JSON or the path does not match.
 
 ### 3. Certificate expiry with three thresholds
 
 Warn 30 days before the certificate expires, escalate to AVERAGE at 14 days and to HIGH at 7 days.
 
 ```json
-[
-  {
-    "{#NAME}": "www-cert",
-    "{#TYPES}": "certificate",
-    "{#URL}": "https://www.example.com",
-    "{#CERT_WARN_DAYS}": "30",
-    "{#CERT_AVG_DAYS}": "14",
-    "{#CERT_HIGH_DAYS}": "7"
+{
+  "www-cert": {
+    "url": "https://www.example.com",
+    "certificate": {
+      "warning": 30,
+      "average": 14,
+      "high": 7
+    }
   }
-]
+}
 ```
 
 **What you get for `www-cert`**
@@ -346,78 +383,47 @@ which Actuator only includes when `management.endpoint.health.show-components` o
 (`when-authorized` does not help, the agent sends no credentials).
 
 ```json
-[
-  {
-    "{#NAME}": "shop-frontend",
-    "{#TYPES}": "http_status",
-    "{#URL}": "https://shop.example.com/",
-    "{#EXPECT_STATUS}": "200"
+{
+  "shop-frontend": {
+    "url": "https://shop.example.com",
+    "expectStatus": "200",
+    "certificate": {
+      "warning": 30,
+      "average": 14,
+      "high": 7
+    }
   },
-  {
-    "{#NAME}": "shop-cert",
-    "{#TYPES}": "certificate",
-    "{#URL}": "https://shop.example.com/",
-    "{#CERT_WARN_DAYS}": "30",
-    "{#CERT_AVG_DAYS}": "14",
-    "{#CERT_HIGH_DAYS}": "7"
+  "orders-api": {
+    "url": "http://localhost:8080/actuator/health",
+    "json": {
+      "path": "$.status",
+      "expect": "UP"
+    }
   },
-  {
-    "{#NAME}": "orders-api",
-    "{#TYPES}": "json_path",
-    "{#URL}": "http://localhost:8080/actuator/health",
-    "{#JSON_PATH}": "$.status",
-    "{#EXPECT_VALUE}": "UP"
+  "billing-db": {
+    "url": "http://localhost:8081/actuator/health",
+    "json": {
+      "path": "$.components.db.status",
+      "expect": "UP"
+    }
   },
-  {
-    "{#NAME}": "billing-db",
-    "{#TYPES}": "json_path",
-    "{#URL}": "http://localhost:8081/actuator/health",
-    "{#JSON_PATH}": "$.components.db.status",
-    "{#EXPECT_VALUE}": "UP"
+  "admin-auth":{
+    "url": "https://shop.example.com/admin",
+    "expectStatus": "401"
   },
-  {
-    "{#NAME}": "admin-auth",
-    "{#TYPES}": "http_status",
-    "{#URL}": "http://localhost:9000/admin/",
-    "{#EXPECT_STATUS}": "401"
-  },
-  {
-    "{#NAME}": "api-cert",
-    "{#TYPES}": "certificate",
-    "{#URL}": "https://api.example.com:8443",
-    "{#CERT_WARN_DAYS}": "21",
-    "{#CERT_AVG_DAYS}": "10",
-    "{#CERT_HIGH_DAYS}": "3"
+  "api": {
+    "url": "https://api.example.com:8443",
+    "expectStatus": "200",
+    "certificate": {
+      "warning": 21,
+      "average": 10,
+      "high": 3
+    }
   }
-]
-```
-
-### 5. Two checks for the same endpoint
-
-You can specify multiple checks in `{#TYPES}` as comma-separated list. The following example checks whether the endpoint
-returns an HTTP 200 status code and whether the field `$.status` holds the value `"UP"`.
-
-```json
-[
-  {
-    "{#NAME}": "payments-status",
-    "{#TYPES}": "http_status,json_path",
-    "{#URL}": "http://localhost:8080/actuator/health",
-    "{#EXPECT_STATUS}": "200",
-    "{#JSON_PATH}": "$.status",
-    "{#EXPECT_VALUE}": "UP"
-  }
-]
+}
 ```
 
 ### Compact form
-
-The macro value is the same JSON without line breaks and indentation. This is
-[example 4](#4-a-realistic-host-several-services-all-three-types) exactly as it goes into the macro field:
-
-```json
-[{"{#NAME}":"shop-frontend","{#TYPES}":"http_status","{#URL}":"https://shop.example.com/","{#EXPECT_STATUS}":"200"},{"{#NAME}":"shop-cert","{#TYPES}":"certificate","{#URL}":"https://shop.example.com/","{#CERT_WARN_DAYS}":"30","{#CERT_AVG_DAYS}":"14","{#CERT_HIGH_DAYS}":"7"},{"{#NAME}":"orders-api","{#TYPES}":"json_path","{#URL}":"http://localhost:8080/actuator/health","{#JSON_PATH}":"$.status","{#EXPECT_VALUE}":"UP"},{"{#NAME}":"billing-db","{#TYPES}":"json_path","{#URL}":"http://localhost:8081/actuator/health","{#JSON_PATH}":"$.components.db.status","{#EXPECT_VALUE}":"UP"},{"{#NAME}":"admin-auth","{#TYPES}":"http_status","{#URL}":"http://localhost:9000/admin/","{#EXPECT_STATUS}":"401"},{"{#NAME}":"api-cert","{#TYPES}":"certificate","{#URL}":"https://api.example.com:8443","{#CERT_WARN_DAYS}":"21","{#CERT_AVG_DAYS}":"10","{#CERT_HIGH_DAYS}":"3"}]
-```
 
 You can use `jq` to produce the compact form from a pretty-printed file and if you chain it with `wc`, you can count the
 characters to ensure you stay below the Zabbix-imposed 2048-character limit:
@@ -434,13 +440,13 @@ All macros are defined on the template and can be overridden per host. Time valu
 
 | Macro | Default | Used by | Purpose |
 |---|---|---|---|
-| `{$PUSHIT.WEBCHECK.CONFIG}` | `[]` | discovery rules | The endpoint list, a JSON array in LLD format. Set this on every host. |
-| `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` | `1m` | `http_status`, `json_path` | Update interval of the raw item **Response {#NAME}**. |
-| `{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}` | `3m` | `http_status` | How long a missing status code is tolerated before **Unexpected status code for {#NAME}** fires. Must be larger than `HTTP.INTERVAL`, otherwise it provides no tolerance and can raise false no-data problems. |
-| `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}` | `3m` | `json_path` | How long a missing response is tolerated before **Unexpected JSON value for {#NAME}** fires. Must be larger than `HTTP.INTERVAL`, otherwise it provides no tolerance and can raise false no-data problems. |
-| `{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}` | `15m` | `certificate` | Update interval of the raw item **Certificate data {#NAME}**. |
-| `{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE}` | `30m` | `certificate` | How long missing certificate data is tolerated before **Certificate data for {#NAME} is unavailable** (INFO) fires. Must be larger than `CERTIFICATE.INTERVAL` and smaller than `CERTIFICATE.HISTORY`. |
-| `{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}` | `90m` | `certificate` | History retention of the raw certificate JSON only. Must be larger than `CERTIFICATE.NO_DATA_GRACE`, should be larger than `CERTIFICATE.INTERVAL` and must be at least `1h`. The derived items are not affected. |
+| `{$PUSHIT.WEBCHECK.CONFIG}` | `{}` | discovery rules | The endpoint configuration, a JSON object. Set this on every host. |
+| `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` | `1m` | HTTP status and JSONPath checks | Update interval of the raw item **Response {#NAME}**. |
+| `{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}` | `3m` | HTTP status check | How long a missing status code is tolerated before **Unexpected status code for {#NAME}** fires. Must be larger than `HTTP.INTERVAL`, otherwise it provides no tolerance and can raise false no-data problems. |
+| `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}` | `3m` | JSONPath check | How long a missing response is tolerated before **Unexpected JSON value for {#NAME}** fires. Must be larger than `HTTP.INTERVAL`, otherwise it provides no tolerance and can raise false no-data problems. |
+| `{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}` | `15m` | Certificate check | Update interval of the raw item **Certificate data {#NAME}**. |
+| `{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE}` | `30m` | Certificate check | How long missing certificate data is tolerated before **Certificate data for {#NAME} is unavailable** (INFO) fires. Must be larger than `CERTIFICATE.INTERVAL` and smaller than `CERTIFICATE.HISTORY`. |
+| `{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}` | `90m` | Certificate check | History retention of the raw certificate JSON only. Must be larger than `CERTIFICATE.NO_DATA_GRACE`, should be larger than `CERTIFICATE.INTERVAL` and must be at least `1h`. The derived items are not affected. |
 
 ### Keep the timing consistent
 
@@ -448,9 +454,9 @@ Timing at a glance, with the default values:
 
 | Check type | Raw item collected every | No-data grace before the trigger fires | Raw history kept for |
 |---|---|---|---|
-| `http_status` | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` = 1m | `{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}` = 3m | never |
-| `json_path` | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` = 1m | `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}` = 3m | never |
-| `certificate` | `{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}` = 15m | `{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE}` = 30m | `{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}` = 90m |
+| HTTP status | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` = 1m | `{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}` = 3m | never |
+| JSONPath | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` = 1m | `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}` = 3m | never |
+| Certificate | `{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}` = 15m | `{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE}` = 30m | `{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}` = 90m |
 
 Two rules follow from this:
 
@@ -464,27 +470,20 @@ Two rules follow from this:
 
 ## 📦 Items and triggers
 
-Every discovered object carries the `{#NAME}` of its entry, so items and triggers of different services never
+Every discovered object carries the name (top level key) of its entry, so items and triggers of different services never
 collide and are easy to tell apart in *Latest data* and *Problems*.
 
-| Discovery rule | Key | Type | Runs | Accepts entries with | Lost resources |
-|---|---|---|---|---|---|
-| **HTTP** | `pushit.webcheck.discovery.http` | Script | every 10m | `{#TYPES}` containing `http_status` or `json_path` | Delete immediately |
-| **Certificate** | `pushit.webcheck.discovery.certificate` | Script | every 10m | `{#TYPES}` containing `certificate` | Delete immediately |
-
-Both rules receive `{$PUSHIT.WEBCHECK.CONFIG}` as the script parameter `config` and return the value of
-`JSON.parse(value).config`.
-
-The **HTTP** rule creates its two dependent prototypes with *Discover* set to *No* and switches on the matching one
-with an override, so each HTTP entry ends up with the raw item plus exactly one dependent item:
+The **HTTP** rule creates its two dependent prototypes with *Discover* set to *No* and enables the applicable prototypes
+through overrides. Each HTTP entry therefore gets the raw item plus the HTTP status item, the JSONPath item, or both,
+depending on its configuration.
 
 | Override | Condition | Effect |
 |---|---|---|
-| Enable http_status | `{#TYPES}` contains `http_status` | Item prototypes whose name matches `^HTTP status.*$` are discovered |
-| Enable json_path | `{#TYPES}` cotnains `json_path` | Item prototypes whose name matches `^JSON path.*$` are discovered |
+| Enable http_status | Configuration contains `expectStatus` key | Item prototypes whose name matches `^HTTP status.*$` are discovered |
+| Enable json_path | Configuration contains `json` key | Item prototypes whose name matches `^JSON path.*$` are discovered |
 
 <details>
-<summary><strong>http_status</strong>: items and triggers</summary>
+<summary><strong>HTTP Status</strong>: items and triggers</summary>
 
 | Item | Key | Type | Value type | Interval | History |
 |---|---|---|---|---|---|
@@ -497,12 +496,12 @@ three-digit status code from the status line with one *Regular expression* prepr
 
 | Trigger | Severity | Condition |
 |---|---|---|
-| Unexpected status code for {#NAME} | HIGH | No status code for `{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}`, or the last code differs from `{#EXPECT_STATUS}`. |
+| Unexpected status code for {#NAME} | HIGH | No status code for `{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}`, or the last code differs from `expectStatus`. |
 
 </details>
 
 <details>
-<summary><strong>json_path</strong>: items and triggers</summary>
+<summary><strong>JSONPath</strong>: items and triggers</summary>
 
 | Item | Key | Type | Value type | Interval | History |
 |---|---|---|---|---|---|
@@ -515,12 +514,12 @@ body, then a *JSONPath* step applies `{#JSON_PATH}`.
 
 | Trigger | Severity | Condition |
 |---|---|---|
-| Unexpected JSON value for {#NAME} | HIGH | No value for `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}`, or the last value differs from `{#EXPECT_VALUE}`. |
+| Unexpected JSON value for {#NAME} | HIGH | No value for `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}`, or the last value differs from `json.expect`. |
 
 </details>
 
 <details>
-<summary><strong>certificate</strong>: items and triggers</summary>
+<summary><strong>Certificate</strong>: items and triggers</summary>
 
 | Item | Key | Type | Value type | Interval | History |
 |---|---|---|---|---|---|
@@ -538,9 +537,9 @@ takes `$.result.value` (`valid`, `invalid` or `valid-but-self-signed`), and **Da
 |---|---|---|
 | Certificate data for {#NAME} is unavailable | INFO | No certificate data for `{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE}`. |
 | Certificate for {#NAME} is invalid | HIGH | The validity value is anything other than `valid`. |
-| Certificate for {#NAME} will expire in {#CERT_WARN_DAYS} or less | WARNING | Days until expiry `<= {#CERT_WARN_DAYS}`. |
-| Certificate for {#NAME} will expire in {#CERT_AVG_DAYS} or less | AVERAGE | Days until expiry `<= {#CERT_AVG_DAYS}`. |
-| Certificate for {#NAME} will expire in {#CERT_HIGH_DAYS} or less | HIGH | Days until expiry `<= {#CERT_HIGH_DAYS}`. |
+| Certificate for {#NAME} will expire in {#CERT_WARN_DAYS} or less | WARNING | Days until expiry `<= certificate.warning`. |
+| Certificate for {#NAME} will expire in {#CERT_AVG_DAYS} or less | AVERAGE | Days until expiry `<= certificate.average`. |
+| Certificate for {#NAME} will expire in {#CERT_HIGH_DAYS} or less | HIGH | Days until expiry `<= certificate.high`. |
 
 The three expiry triggers are independent of each other: once the days drop to the HIGH threshold, all three are
 in problem state.
@@ -549,11 +548,11 @@ in problem state.
 
 ## 💡 Tips and gotchas
 
-- **Renaming an entry recreates it.** `{#NAME}` is part of the item keys, so a renamed entry produces new items and
-  triggers and deletes the old ones (including their history).
+- **Renaming an entry recreates it.** The top-level key is part of the Zabbix item keys, so a renamed entry produces new
+  items and triggers and deletes the old ones (including their history).
 - **Plain requests from the agent.** `web.page.get` and `web.certificate.get` send unauthenticated requests without
   custom headers or body, so point them at endpoints that answer anonymously. To verify that a protected endpoint is up,
-  use `http_status` with `{#EXPECT_STATUS}` `"401"`. The requests originate on the monitored host: firewalls between the
+  use `http_status` with `expectStatus: "401"`. The requests originate on the monitored host: firewalls between the
   agent and the service matter, firewalls between the Zabbix server and the service do not.
 - **Certificate checks need `https` and Zabbix agent 2.** For obvious reasons, `web.certificate.get` accepts only the
   `https` scheme. For less obvious reasons it exists only in agent 2. On a host with the classic agent,
@@ -570,9 +569,6 @@ in problem state.
   list of the host and click *Disable* instead of removing it from the macro.
 - **Invalid JSON stops discovery.** If the macro is not valid JSON, both discovery rules turn *Not supported* with
   the parse error shown in the rule status. Existing items stay as they are until the macro is fixed.
-- **Unknown values in `{#TYPES}` are ignored.** A typo such as `http-status` matches neither rule and produces no items,
-  no triggers and no error. Check the *Items* and *Latest data* views after adding an entry and executing the discovery
-  rule.
 - **The macro value is limited to 2048 characters.** Keep the JSON compact and the names and URLs short. Depending
   on URL length, somewhere between a dozen and twenty entries fit into one macro. Count the characters as shown in
   [compact form](#compact-form).
@@ -608,5 +604,4 @@ installation, so re-importing updates instead of duplicating.
 
 Apache License 2.0, see [LICENSE](LICENSE).
 
-[Zabbix LLD]: https://www.zabbix.com/documentation/current/en/manual/discovery/low_level_discovery
 [Zabbix JSONPath]: https://www.zabbix.com/documentation/current/en/manual/config/items/preprocessing/jsonpath_functionality
