@@ -447,7 +447,7 @@ All macros are defined on the template and can be overridden per host. Time valu
 | Macro | Default | Used by | Purpose |
 |---|---|---|---|
 | `{$PUSHIT.WEBCHECK.CONFIG}` | `[]` | discovery rules | The endpoint list, a JSON array in LLD format. Set this on every host. |
-| `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` | `1m` | `http_status`, `json_path` | Update interval of the raw item **Response {#NAME}**. The template also uses it as that item's history period, see [Keep the timing consistent](#keep-the-timing-consistent). |
+| `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` | `1m` | `http_status`, `json_path` | Update interval of the raw item **Response {#NAME}**. |
 | `{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}` | `3m` | `http_status` | How long a missing status code is tolerated before **Unexpected status code for {#NAME}** fires. Must be larger than `HTTP.INTERVAL`, otherwise it provides no tolerance and can raise false no-data problems. |
 | `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}` | `3m` | `json_path` | How long a missing response is tolerated before **Unexpected JSON value for {#NAME}** fires. Must be larger than `HTTP.INTERVAL`, otherwise it provides no tolerance and can raise false no-data problems. |
 | `{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}` | `15m` | `certificate` | Update interval of the raw item **Certificate data {#NAME}**. |
@@ -460,8 +460,8 @@ Timing at a glance, with the default values:
 
 | Check type | Raw item collected every | No-data grace before the trigger fires | Raw history kept for |
 |---|---|---|---|
-| `http_status` | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` = 1m | `{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}` = 3m | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` = 1m, see note below |
-| `json_path` | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` = 1m | `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}` = 3m | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` = 1m, see note below |
+| `http_status` | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` = 1m | `{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}` = 3m | never |
+| `json_path` | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` = 1m | `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}` = 3m | never |
 | `certificate` | `{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}` = 15m | `{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE}` = 30m | `{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}` = 90m |
 
 Two rules follow from this:
@@ -473,12 +473,6 @@ Two rules follow from this:
   watches the raw item **Certificate data {#NAME}**, whose history is set by `CERTIFICATE.HISTORY`, so the history
   has to outlast the grace period. When you raise one, raise the other with it. The HTTP `nodata()` triggers watch
   the dependent items, which keep the Zabbix default history of 31d, so no such rule applies to them.
-
-A note on the raw HTTP history: Zabbix accepts history periods from `1h` to `25y` (or `0`), and **Response {#NAME}**
-reuses `HTTP.INTERVAL` as its history period. With the default `1m` that period is out of range, so the housekeeper
-logs `invalid history storage period` for the item and skips it, and the raw responses stay as long as the item
-exists. If you want them cleaned up, set `HTTP.INTERVAL` to `1h` or more, or give the item prototype a history
-period of its own after import. The last value is always visible in *Latest data*.
 
 ## 📦 Items and triggers
 
@@ -506,7 +500,7 @@ with an override, so each HTTP entry ends up with the raw item plus exactly one 
 
 | Item | Key | Type | Value type | Interval | History |
 |---|---|---|---|---|---|
-| Response {#NAME} | `web.page.get["{#URL}"]` | Zabbix agent | Text | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}`, see [Keep the timing consistent](#keep-the-timing-consistent) |
+| Response {#NAME} | `web.page.get["{#URL}"]` | Zabbix agent | Text | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` | none |
 | HTTP status {#NAME} | `pushit.webcheck.http.status[{#NAME}]` | Dependent on Response {#NAME} | Numeric (unsigned) | with the master item | 31d (Zabbix default) |
 
 **Response {#NAME}** holds the raw response: status line, headers and body. **HTTP status {#NAME}** extracts the
@@ -524,7 +518,7 @@ three-digit status code from the status line with one *Regular expression* prepr
 
 | Item | Key | Type | Value type | Interval | History |
 |---|---|---|---|---|---|
-| Response {#NAME} | `web.page.get["{#URL}"]` | Zabbix agent | Text | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}`, see [Keep the timing consistent](#keep-the-timing-consistent) |
+| Response {#NAME} | `web.page.get["{#URL}"]` | Zabbix agent | Text | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` | none |
 | JSON path {#NAME} | `pushit.webcheck.http.json_path[{#NAME}]` | Dependent on Response {#NAME} | Text | with the master item | 31d (Zabbix default) |
 
 **Response {#NAME}** is the same raw item as for `http_status`. **JSON path {#NAME}** has two preprocessing steps: a
