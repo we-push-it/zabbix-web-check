@@ -35,8 +35,7 @@ to check as a public one.
 
 - 🩺 **Three check types.** `http_status` compares the response status code, `json_path` compares one value inside a
   JSON body, `certificate` watches TLS validity and expiry.
-- 🧾 **One macro per host.** All endpoints live in `{$PUSHIT.WEBCHECK.CONFIG}`; no item cloning, no template per
-  service.
+- 🧾 **One macro per host.** All endpoints live in `{$PUSHIT.WEBCHECK.CONFIG}`; no item cloning.
 - 🏠 **Runs where the service runs.** Checks are Zabbix agent items, so `http://localhost:8080/health` works without
   exposing anything.
 - 🧹 **Self-cleaning.** Remove an entry from the macro and its items and triggers disappear on the next discovery
@@ -139,7 +138,7 @@ From download to the first problem in Zabbix in six steps.
    tab, type `PUSH IT Webcheck` into the *Templates* field, select it and click **Update**.
 4. **Configure the endpoints.** Open the host again, switch to the *Macros* tab, select *Inherited and host macros*,
    click **Change** next to `{$PUSHIT.WEBCHECK.CONFIG}` and paste your endpoint list as one line of JSON. For a
-   first test, a single HTTP status check is enough (adjust the port and path):
+   first test, a single HTTP status check is enough (adjust the host, port and path):
 
    ```json
    [{"{#NAME}":"app","{#TYPE}":"http_status","{#URL}":"http://localhost:8080/health","{#EXPECT_STATUS}":"200"}]
@@ -426,14 +425,14 @@ group, as `shop-frontend` and `shop-cert` do in example 4.
 ### Compact form
 
 The macro value is the same JSON without line breaks and indentation. This is
-[example 4](#4-a-realistic-host-several-services-all-three-types) exactly as it goes into the macro field, about
-850 of the 2048 characters a macro value can hold:
+[example 4](#4-a-realistic-host-several-services-all-three-types) exactly as it goes into the macro field:
 
 ```json
 [{"{#NAME}":"shop-frontend","{#TYPE}":"http_status","{#URL}":"https://shop.example.com/","{#EXPECT_STATUS}":"200"},{"{#NAME}":"shop-cert","{#TYPE}":"certificate","{#URL}":"https://shop.example.com/","{#CERT_WARN_DAYS}":"30","{#CERT_AVG_DAYS}":"14","{#CERT_HIGH_DAYS}":"7"},{"{#NAME}":"orders-api","{#TYPE}":"json_path","{#URL}":"http://localhost:8080/actuator/health","{#JSON_PATH}":"$.status","{#EXPECT_VALUE}":"UP"},{"{#NAME}":"billing-db","{#TYPE}":"json_path","{#URL}":"http://localhost:8081/actuator/health","{#JSON_PATH}":"$.components.db.status","{#EXPECT_VALUE}":"UP"},{"{#NAME}":"admin-auth","{#TYPE}":"http_status","{#URL}":"http://localhost:9000/admin/","{#EXPECT_STATUS}":"401"},{"{#NAME}":"api-cert","{#TYPE}":"certificate","{#URL}":"https://api.example.com:8443","{#CERT_WARN_DAYS}":"21","{#CERT_AVG_DAYS}":"10","{#CERT_HIGH_DAYS}":"3"}]
 ```
 
-`jq` produces the compact form from a pretty-printed file, validates it and counts its characters in one go:
+You can use `jq` to produce the compact form from a pretty-printed file and if you chain it with `wc`, you can count the
+characters to ensure you stay below the Zabbix-imposed 2048-character limit:
 
 ```sh
 jq -c . webcheck.json            # validate and print the compact form
@@ -442,12 +441,12 @@ jq -cj . webcheck.json | wc -m   # count its characters: at most 2048 fit into a
 
 ## 🔢 Macros
 
-All seven macros are defined on the template and can be overridden per host (*Macros* tab, *Inherited and host
-macros*, **Change**). Time values are Zabbix time expressions such as `30s`, `5m`, `1h` or `2d`.
+All macros are defined on the template and can be overridden per host. Time values are Zabbix time expressions such as
+`30s`, `5m`, `1h` or `2d`.
 
 | Macro | Default | Used by | Purpose |
 |---|---|---|---|
-| `{$PUSHIT.WEBCHECK.CONFIG}` | `[]` | both discovery rules | The endpoint list, a JSON array in LLD format. Set this on every host. |
+| `{$PUSHIT.WEBCHECK.CONFIG}` | `[]` | discovery rules | The endpoint list, a JSON array in LLD format. Set this on every host. |
 | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` | `1m` | `http_status`, `json_path` | Update interval of the raw item **Response {#NAME}**. The template also uses it as that item's history period, see [Keep the timing consistent](#keep-the-timing-consistent). |
 | `{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}` | `3m` | `http_status` | How long a missing status code is tolerated before **Unexpected status code for {#NAME}** fires. Must be larger than `HTTP.INTERVAL`, otherwise it provides no tolerance and can raise false no-data problems. |
 | `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}` | `3m` | `json_path` | How long a missing response is tolerated before **Unexpected JSON value for {#NAME}** fires. Must be larger than `HTTP.INTERVAL`, otherwise it provides no tolerance and can raise false no-data problems. |
@@ -518,12 +517,6 @@ three-digit status code from the status line with one *Regular expression* prepr
 |---|---|---|
 | Unexpected status code for {#NAME} | HIGH | No status code for `{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}`, or the last code differs from `{#EXPECT_STATUS}`. |
 
-```text
-nodata(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}],{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE})=1
-or
-last(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}])<>{#EXPECT_STATUS}
-```
-
 </details>
 
 <details>
@@ -541,12 +534,6 @@ body, then a *JSONPath* step applies `{#JSON_PATH}`.
 | Trigger | Severity | Condition |
 |---|---|---|
 | Unexpected JSON value for {#NAME} | HIGH | No value for `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}`, or the last value differs from `{#EXPECT_VALUE}`. |
-
-```text
-nodata(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}],{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE})=1
-or
-last(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}])<>"{#EXPECT_VALUE}"
-```
 
 </details>
 
@@ -573,20 +560,6 @@ takes `$.result.value` (`valid`, `invalid` or `valid-but-self-signed`), and **Da
 | Certificate for {#NAME} will expire in {#CERT_AVG_DAYS} or less | AVERAGE | Days until expiry `<= {#CERT_AVG_DAYS}`. |
 | Certificate for {#NAME} will expire in {#CERT_HIGH_DAYS} or less | HIGH | Days until expiry `<= {#CERT_HIGH_DAYS}`. |
 
-```text
-nodata(/PUSH IT Webcheck/web.certificate.get["{#URL}"],{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE})=1
-```
-
-```text
-last(/PUSH IT Webcheck/pushit.webcheck.certificate.is_valid[{#NAME}]) <> "valid"
-```
-
-```text
-last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_WARN_DAYS}
-last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_AVG_DAYS}
-last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_HIGH_DAYS}
-```
-
 The three expiry triggers are independent of each other: once the days drop to the HIGH threshold, all three are
 in problem state.
 
@@ -597,16 +570,15 @@ in problem state.
 - **One URL per entry within a rule.** Two `http_status`/`json_path` entries, or two `certificate` entries, cannot
   share a URL because the raw item key contains it. [Example 5](#5-same-endpoint-two-checks) shows the query string
   trick.
-- **Renaming an entry recreates it.** `{#NAME}` is part of the item keys, so a renamed entry gets new items and
-  triggers and loses the history of the old ones.
+- **Renaming an entry recreates it.** `{#NAME}` is part of the item keys, so a renamed entry produces new items and
+  triggers and deletes the old ones (including their history).
 - **Plain requests from the agent.** `web.page.get` and `web.certificate.get` send unauthenticated requests without
-  custom headers or body, so point them at endpoints that answer anonymously, typically a health endpoint on
-  `localhost`. To verify that a protected endpoint is up, use `http_status` with `{#EXPECT_STATUS}` `"401"`. The
-  requests originate on the monitored host: firewalls between the agent and the service matter, firewalls between
-  the Zabbix server and the service do not.
-- **Certificate checks need `https` and Zabbix agent 2.** `web.certificate.get` accepts only the `https` scheme and
-  exists only in agent 2. On a host with the classic agent, **Certificate data {#NAME}** becomes *Not supported*
-  and the only problem you will see is the INFO trigger after 30 minutes.
+  custom headers or body, so point them at endpoints that answer anonymously. To verify that a protected endpoint is up,
+  use `http_status` with `{#EXPECT_STATUS}` `"401"`. The requests originate on the monitored host: firewalls between the
+  agent and the service matter, firewalls between the Zabbix server and the service do not.
+- **Certificate checks need `https` and Zabbix agent 2.** For obvious reasons, `web.certificate.get` accepts only the
+  `https` scheme. For less obvious reasons it exists only in agent 2. On a host with the classic agent,
+  **Certificate data {#NAME}** becomes *Not supported* and an INFO-level problem will be triggered after 30 minutes.
 - **`https` in HTTP checks needs cURL in the classic agent.** The classic Zabbix agent must be built with cURL
   support to fetch `https` URLs with `web.page.get`, otherwise the item becomes *Not supported*. Zabbix agent 2 has
   no such requirement.
@@ -615,20 +587,23 @@ in problem state.
   certificate. Self-signed certificates yield `valid-but-self-signed`, which also fires **Certificate for {#NAME}
   is invalid**.
 - **Removed means gone.** There is no way to pause a check from the configuration: an entry taken out of the macro
-  loses its items, triggers and history on the next discovery run.
+  loses its items, triggers and history on the next discovery run. If you want to disable an item, select it on the item
+  list of the host and click *Disable* instead of removing it from the macro.
 - **Invalid JSON stops discovery.** If the macro is not valid JSON, both discovery rules turn *Not supported* with
   the parse error shown in the rule status. Existing items stay as they are until the macro is fixed.
 - **Unknown `{#TYPE}` values are ignored.** A typo such as `http-status` matches neither rule and produces no items,
-  no triggers and no error. Check *Latest data* after adding an entry.
+  no triggers and no error. Check the *Items* and *Latest data* views after adding an entry and executing the discovery
+  rule.
 - **The macro value is limited to 2048 characters.** Keep the JSON compact and the names and URLs short. Depending
   on URL length, somewhere between a dozen and twenty entries fit into one macro. Count the characters as shown in
   [compact form](#compact-form).
 - **Missing certificate data is only INFO.** The nodata trigger of the raw certificate item has severity INFO. The
   alerts that matter come from the validity and expiry triggers. If you want it louder, raise the severity of the
   trigger prototype **Certificate data for {#NAME} is unavailable** after import.
-- **The days value moves every 6 hours.** **Days until certificate expires ({#NAME})** is a calculated item with a
-  6-hour interval. The first value appears shortly after discovery, afterwards it is refreshed only every 6 hours,
-  so after a renewal the expiry problems resolve on the next run. **Execute now** on the item refreshes it at once.
+- **The days value moves every 6 hours.** The item **Days until certificate expires ({#NAME})** is a calculated item
+  with a 6-hour interval. The first value appears shortly after discovery, afterwards it is refreshed only every 6 hours,
+  so after a renewal the expiry problems resolve on the next run. Click **Execute now** on the item to refresh it
+  immediately and clear the problem.
 - **Slow endpoints and the item timeout.** The item prototypes set no timeout of their own, so the global timeout
   for Zabbix agent items (default 3 seconds, *Administration → General → Timeouts*) or the proxy's timeout applies.
   Raise it if a health endpoint needs longer than that.
@@ -641,15 +616,9 @@ in problem state.
 ## 🔧 Development
 
 The whole template is `template.yaml`, a Zabbix 7.4 YAML export. Keep it lint-clean with
-[yamllint](https://github.com/adrienverge/yamllint):
-
-```sh
-pip install yamllint      # or the package of your distribution
-yamllint template.yaml
-```
-
-The rules live in [`.yamllint.yaml`](.yamllint.yaml): yamllint's defaults plus a 140-character line limit and
-single quotes wherever strings are quoted.
+[yamllint](https://github.com/adrienverge/yamllint). The program is packaged for all major operating systems and
+installation instructions for manual installation are available on its Github repo. The configuration for yamllint is
+stored in the default, project-local rule file `.yamllint.yaml`.
 
 To verify a change functionally, import the file into a test Zabbix (importing again updates the existing
 template), link it to a host with an agent, set a small `{$PUSHIT.WEBCHECK.CONFIG}` and run **Execute now** on both
