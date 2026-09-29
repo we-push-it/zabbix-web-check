@@ -32,12 +32,12 @@ for (var key in configData) {
         outputItem["{#EXPECT_STATUS}"] = item.expectStatus;
     }
 
-    // json_path check
-    if (item.hasOwnProperty("json")) {
-        checkTypes.push("json_path");
-        requireFields(item.json, ["path", "expect"], key);
-        outputItem["{#JSON_PATH}"] = item.json.path;
-        outputItem["{#EXPECT_VALUE}"] = item.json.expect;
+    // json_path_text check
+    if (item.hasOwnProperty("json_text")) {
+        checkTypes.push("json_path_text");
+        requireFields(item.json_text, ["path", "expect"], key);
+        outputItem["{#JSON_PATH_TEXT}"] = item.json_text.path;
+        outputItem["{#EXPECT_VALUE_TEXT}"] = item.json_text.expect;
     }
 
     // certificate check

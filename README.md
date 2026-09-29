@@ -54,14 +54,14 @@ flowchart LR
     CFG(["Host macro<br/>{$PUSHIT.WEBCHECK.CONFIG}<br/>JSON object, one named property per endpoint"])
 
     subgraph LLD ["Discovery rules, every 10m"]
-        DH["HTTP<br/>json or expectStatus top-level-key present"]
+        DH["HTTP<br/>json_text or expectStatus top-level-key present"]
         DC["Certificate<br/>certificate top-level-key present"]
     end
 
     subgraph HI ["HTTP items, every HTTP.INTERVAL"]
         RAW["Response {#NAME}<br/>web.page.get"]
         ST["HTTP status {#NAME}<br/>status line regex"]
-        JP["JSON path {#NAME}<br/>body + JSONPath"]
+        JP["JSON path (text) {#NAME}<br/>body + JSONPath"]
     end
 
     subgraph CI ["Certificate items, raw data every CERTIFICATE.INTERVAL"]
@@ -82,7 +82,7 @@ flowchart LR
     CFG --> DH & DC
     DH --> RAW
     RAW -->|expectStatus present| ST
-    RAW -->|json present| JP
+    RAW -->|json_text present| JP
     DC --> CRAW
     CRAW --> NA & VAL
     NA --> DAYS
@@ -119,7 +119,7 @@ From download to the first problem in Zabbix in six steps.
 | Requirement | Why |
 |---|---|
 | Zabbix server 7.4 or later | The template file format requires Zabbix 7.4 or later.  |
-| A Zabbix agent on the monitored host | `http_status` and `json_path` use `web.page.get`, available in the classic Zabbix agent and in Zabbix agent 2. |
+| A Zabbix agent on the monitored host | `http_status` and `json_path_text` use `web.page.get`, available in the classic Zabbix agent and in Zabbix agent 2. |
 | Zabbix agent 2 for `certificate` checks | `web.certificate.get` exists in Zabbix agent 2 only. |
 | An agent interface on the host | All collecting items are passive *Zabbix agent* items, so the server or proxy must be able to poll the agent. |
 | A network path from the agent to the endpoints | Requests are made from the agent, not from the Zabbix server or proxy. `localhost` is the monitored host itself. |
@@ -201,7 +201,7 @@ and compares the status code from the first line of the response. The body is no
 
 ### Checking a specific field in JSON
 
-This check is enabled by setting `json`. Some status pages provide a machine-readable JSON version. You can use this
+This check is enabled by setting `json_text`. Some status pages provide a machine-readable JSON version. You can use this
 check to query a specific field described by a [Zabbix JSONPath]. It fetches the URL every
 `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` (default `1m`) with the same `web.page.get` item, treats the body as JSON and
 compares one value in it. The status code is not evaluated by this check.
@@ -210,7 +210,7 @@ compares one value in it. The status code is not evaluated by this check.
 {
   "my-application": {
     "url": "https://example.org/health.json",
-    "json": {
+    "json_text": {
       "path": "$.status",
       "expect": "healthy"
     }
@@ -307,21 +307,21 @@ endpoints must answer without authentication.
 {
   "shop-api": {
     "url": "http://localhost:8080/actuator/health",
-    "json": {
+    "json_text": {
       "path": "$.status",
       "expect": "UP"
     }
   },
   "search": {
     "url": "http://localhost:9200/_cluster/health",
-    "json": {
+    "json_text": {
       "path": "$.status",
       "expect": "green"
     }
   },
   "worker": {
     "url": "http://localhost:3000/healthz",
-    "json": {
+    "json_text": {
       "path": "$.ready",
       "expect": "true"
     }
@@ -334,7 +334,7 @@ endpoints must answer without authentication.
 | Object | Name | Severity |
 |---|---|---|
 | Item | Response shop-api / search / worker| – |
-| Item | JSON path shop-api / search / worker | – |
+| Item | JSON path (text) shop-api / search / worker | – |
 | Trigger | Unexpected JSON value for shop-api / search / worker | HIGH |
 
 The trigger fires when the selected value differs from `UP` / `green` / `true`, and also when no value has arrived for
@@ -395,14 +395,14 @@ which Actuator only includes when `management.endpoint.health.show-components` o
   },
   "orders-api": {
     "url": "http://localhost:8080/actuator/health",
-    "json": {
+    "json_text": {
       "path": "$.status",
       "expect": "UP"
     }
   },
   "billing-db": {
     "url": "http://localhost:8081/actuator/health",
-    "json": {
+    "json_text": {
       "path": "$.components.db.status",
       "expect": "UP"
     }
@@ -480,7 +480,7 @@ depending on its configuration.
 | Override | Condition | Effect |
 |---|---|---|
 | Enable http_status | Configuration contains `expectStatus` key | Item prototypes whose name matches `^HTTP status.*$` are discovered |
-| Enable json_path | Configuration contains `json` key | Item prototypes whose name matches `^JSON path.*$` are discovered |
+| Enable json_path_text | Configuration contains `json_text` key | Item prototypes whose name matches `^JSON path \(text\).*$` are discovered |
 
 <details>
 <summary><strong>HTTP Status</strong>: items and triggers</summary>
@@ -506,15 +506,15 @@ three-digit status code from the status line with one *Regular expression* prepr
 | Item | Key | Type | Value type | Interval | History |
 |---|---|---|---|---|---|
 | Response {#NAME} | `web.page.get["{#URL}"]` | Zabbix agent | Text | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` | none |
-| JSON path {#NAME} | `pushit.webcheck.http.json_path[{#NAME}]` | Dependent on Response {#NAME} | Text | with the master item | 31d (Zabbix default) |
+| JSON path (text) {#NAME} | `pushit.webcheck.http.json_path_text[{#NAME}]` | Dependent on Response {#NAME} | Text | with the master item | 31d (Zabbix default) |
 
-**Response {#NAME}** is the same raw item as for `http_status`. **JSON path {#NAME}** has two preprocessing steps: a
+**Response {#NAME}** is the same raw item as for `http_status`. **JSON path (text) {#NAME}** has two preprocessing steps: a
 *Regular expression* step with the pattern `\r?\n\r?\n([\s\S]*)` and the output `\1` drops the headers and keeps the
-body, then a *JSONPath* step applies `{#JSON_PATH}`.
+body, then a *JSONPath* step applies `{#JSON_PATH_TEXT}`.
 
 | Trigger | Severity | Condition |
 |---|---|---|
-| Unexpected JSON value for {#NAME} | HIGH | No value for `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}`, or the last value differs from `json.expect`. |
+| Unexpected JSON value for {#NAME} | HIGH | No value for `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}`, or the last value differs from `json_text.expect`. |
 
 </details>
 

@@ -104,7 +104,7 @@ zabbix_export:
               - macro: '{#TYPES}'
                 value: '^(.+,)*http_status(,.+)*$'
               - macro: '{#TYPES}'
-                value: '^(.+,)*json_path(,.+)*$'
+                value: '^(.+,)*json_path_text(,.+)*$'
           lifetime_type: DELETE_IMMEDIATELY
           description: 'Discovery rule for items based on an HTTP response from the endpoint'
           item_prototypes:
@@ -138,9 +138,9 @@ zabbix_export:
                     The status code of the monitored service does not match the expected status {#EXPECT_STATUS} code or
                     no status code is available for more than {$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}.
             - uuid: 4517fccf57e3473a80e786ada27dac6b
-              name: 'JSON path {#NAME}'
+              name: 'JSON path (text) {#NAME}'
               type: DEPENDENT
-              key: 'pushit.webcheck.http.json_path[{#NAME}]'
+              key: 'pushit.webcheck.http.json_path_text[{#NAME}]'
               value_type: TEXT
               discover: NO_DISCOVER
               preprocessing:
@@ -150,20 +150,20 @@ zabbix_export:
                     - \1
                 - type: JSONPATH
                   parameters:
-                    - '{#JSON_PATH}'
+                    - '{#JSON_PATH_TEXT}'
               master_item:
                 key: 'web.page.get["{#URL}"]'
               trigger_prototypes:
                 - uuid: 9a42683503184a378dc57cc56f3b0d6b
                   expression: |
-                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}],{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE})=1
+                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text[{#NAME}],{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE})=1
                     or
-                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}])<>"{#EXPECT_VALUE}"
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text[{#NAME}])<>"{#EXPECT_VALUE_TEXT}"
                   name: 'Unexpected JSON value for {#NAME}'
                   priority: HIGH
                   description: |
-                    The value at "{#JSON_PATH}" in the response of the monitored service does not match the expected
-                    value of "{#EXPECT_VALUE}" or no response is available for more than
+                    The value at "{#JSON_PATH_TEXT}" in the response of the monitored service does not match the expected
+                    value of "{#EXPECT_VALUE_TEXT}" or no response is available for more than
                     {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}.
           parameters:
             - name: config
@@ -179,15 +179,15 @@ zabbix_export:
                 - operator: REGEXP
                   value: '^HTTP status.*$'
                   discover: DISCOVER
-            - name: 'Enable json_path'
+            - name: 'Enable json_path_text'
               step: '2'
               filter:
                 conditions:
                   - macro: '{#TYPES}'
-                    value: '^(.+,)*json_path(,.+)*$'
+                    value: '^(.+,)*json_path_text(,.+)*$'
               operations:
                 - operator: REGEXP
-                  value: '^JSON path.*$'
+                  value: '^JSON path \(text\).*$'
                   discover: DISCOVER
 
       macros:

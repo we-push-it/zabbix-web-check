@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Changed
 - **BC!** Configuration format changed from list of LLD objects to JSON object
+- Rename item `JSON path {#NAME}` to `JSON path (text) {#NAME}`. This change also renames the Zabbix item key from
+`pushit.webcheck.http.json_path` to `pushit.webcheck.http.json_path_text` and the internal type `json_path` to
+`json_path_text`. **Data loss:** This change leads to loosing history of the renamed items.
 
 ## [v0.2.0] - 2026-09-29
 ### Changed
