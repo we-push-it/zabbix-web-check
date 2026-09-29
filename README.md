@@ -118,7 +118,7 @@ From download to the first problem in Zabbix in six steps.
 
 | Requirement | Why |
 |---|---|
-| Zabbix server 7.4 or later | `template.yaml` is a Zabbix 7.4 export (`zabbix_export.version: '7.4'`); import it into Zabbix 7.4 or a later release. |
+| Zabbix server 7.4 or later | The template file format requires Zabbix 7.4 or later.  |
 | A Zabbix agent on the monitored host | `http_status` and `json_path` use `web.page.get`, available in the classic Zabbix agent and in Zabbix agent 2. |
 | Zabbix agent 2 for `certificate` checks | `web.certificate.get` exists in Zabbix agent 2 only. |
 | An agent interface on the host | All collecting items are passive *Zabbix agent* items, so the server or proxy must be able to poll the agent. |
@@ -126,8 +126,8 @@ From download to the first problem in Zabbix in six steps.
 
 ### Steps
 
-1. **Download** [`template.yaml`](template.yaml) from this repository.
-2. **Import the template.** Go to *Data collection → Templates*, click **Import**, select `template.yaml`, keep the
+1. **Download** `template.dist.yaml` from this repository.
+2. **Import the template.** Go to *Data collection → Templates*, click **Import**, select the downloaded file, keep the
    default import rules and click **Import**. **PUSH IT Webcheck** now appears in the template group *Templates*.
 3. **Link it to the host** that runs the services: open the host under *Data collection → Hosts* and, on the *Host*
    tab, type `PUSH IT Webcheck` into the *Templates* field, select it and click **Update**.
@@ -590,7 +590,8 @@ in problem state.
 
 ## 🔧 Development
 
-The whole template is `template.yaml`, a Zabbix 7.4 YAML export. Keep it lint-clean with
+The template is `template.yaml` and the discovery script is in `discovery_script.js`. The final `template.dist.yaml` can
+be produced with the included Makefile. Keep the yaml files lint-clean with
 [yamllint](https://github.com/adrienverge/yamllint). The program is packaged for all major operating systems and
 installation instructions for manual installation are available on its Github repo. The configuration for yamllint is
 stored in the default, project-local rule file `.yamllint.yaml`.
