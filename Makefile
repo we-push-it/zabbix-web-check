@@ -7,3 +7,8 @@ template.dist.yaml: template.yaml .discovery_script.trimmed.js
 # Removes type annotations and noinspection comments
 .discovery_script.trimmed.js: discovery_script.js
 	 grep -v '^[[:space:]]*// noinspection' $< | grep -v '^/\*' | grep -v '^\ *\*'  > $@
+
+# Run yamllint on template.yaml
+lint: template.yaml
+	yamllint template.yaml
+.PHONY: lint
