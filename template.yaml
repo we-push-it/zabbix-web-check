@@ -203,7 +203,7 @@ zabbix_export:
         - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE}'
           value: 30m
           description: |
-            Time expression for how long absent certificate data is tolerated before a problem of HIGH severity is
+            Time expression for how long absent certificate data is tolerated before a problem of INFO severity is
             raised. This should be higher than PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL or it will not have any effect.
             If you raise this value, you should review the value of PUSHIT.WEBCHECK.CERTIFICATE.HISTORY and its
             description outlining constraints applying to it.
