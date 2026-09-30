@@ -78,6 +78,10 @@ flowchart LR
         TRG_NUM_NOT_MATCH{{"JSON value does not match expected value (number)<br/>HIGH"}}
         TRG_TXT_MATCH{{"JSON value matches prohibited value (text)<br/>HIGH"}}
         TRG_NUM_MATCH{{"JSON value matches prohibited value (number)<br/>HIGH"}}
+        TRG_NUM_LESS_THAN{{"JSON value is not below expected limit (number)<br/>HIGH"}}
+        TRG_NUM_LESS_OR_EQUAL{{"JSON value exceeds expected maximum (number)<br/>HIGH"}}
+        TRG_NUM_GREATER_THAN{{"JSON value is not above expected limit (number)<br/>HIGH"}}
+        TRG_NUM_GREATER_OR_EQUAL{{"JSON value is below expected minimum (number)<br/>HIGH"}}
         TRG_TXT_ABSENT{{"Missing JSON value<br/>WARNING"}}
         TRG_NUM_ABSENT{{"Missing JSON value<br/>WARNING"}}
         TRG_CERT_ABSENT{{"Certificate data unavailable<br/>INFO"}}
@@ -102,6 +106,10 @@ flowchart LR
     ITM_CERT_DAYS_REMAIN --> TRG_CERT_EXPIRY
     ITM_JSON_NUM -->|"operator is = (default)"| TRG_NUM_NOT_MATCH
     ITM_JSON_NUM -->|"operator is <>"| TRG_NUM_MATCH
+    ITM_JSON_NUM -->|"operator is <"| TRG_NUM_LESS_THAN
+    ITM_JSON_NUM -->|"operator is <="| TRG_NUM_LESS_OR_EQUAL
+    ITM_JSON_NUM -->|"operator is >"| TRG_NUM_GREATER_THAN
+    ITM_JSON_NUM -->|"operator is >="| TRG_NUM_GREATER_OR_EQUAL
     ITM_JSON_NUM --> TRG_NUM_ABSENT
 ```
 
@@ -238,7 +246,18 @@ compares values in it. The status code is not evaluated by this check.
 |---|---|
 | `path` | [Zabbix JSONPath] expression selecting the value, for example `$.status` or `$.components.db.status`. Use a definite path: an expression that returns a list yields a JSON array as text, which is hard to compare. |
 | `expect` | Value to compare against, as a string (`json_text`) or number (`json_number`). JSON strings and booleans arrive without quotes (`UP`, `true`), numbers as numbers (`0`). A value that does not satisfy the configured comparison raises a problem on HIGH level. |
-| `operator` | Overrides the comparison operator from `"="` (the default). Supported values: `=`, `<>` |
+| `operator` | Comparison the selected value must satisfy against `expect`; defaults to `"="`. See below for allowed operators |
+
+#### Allowed operators
+
+| Operator | Healthy condition | Supported checks |
+|---|---|---|
+| `=` (default) | Value equals `expect` | Text and number |
+| `<>` | Value differs from `expect` | Text and number |
+| `<` | Value is less than `expect` | Number only |
+| `<=` | Value is less than or equal to `expect` | Number only |
+| `>` | Value is greater than `expect` | Number only |
+| `>=` | Value is greater than or equal to `expect` | Number only |
 
 If no value arrives for `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}` (default `3m`), a separate trigger raises
 **Missing JSON value for {#NAME}** (WARNING). This applies to both text and numeric checks.
@@ -319,7 +338,7 @@ Any status code works as expectation. An endpoint behind authentication, for exa
 ### 2. JSON health endpoints
 
 Spring Boot Actuator answers `GET /actuator/health` with a body such as `{"status":"UP"}`. The first entry selects
-`$.status` and expects `UP`. The second watches a cluster which must not have any unhealthy nodes, the
+`$.status` and expects `UP`. The second watches a cluster which must not have more than 10 failed tasks, the
 third reads a boolean from a body like `{"ready":true}`, which is compared as the string `"true"`. The fourth monitors
 a queue-worker, which must *not* report the queue status as "full" (`{"queueStatus":"FULL"}`).
 
@@ -335,8 +354,9 @@ a queue-worker, which must *not* report the queue status as "full" (`{"queueStat
   "search": {
     "url": "http://localhost:9200/_cluster/health",
     "json_number": {
-      "path": "$.unhealthyNodes",
-      "expect": 0
+      "path": "$.failedTasks",
+      "expect": 10,
+      "operator": "<"
     }
   },
   "worker": {
@@ -365,13 +385,14 @@ a queue-worker, which must *not* report the queue status as "full" (`{"queueStat
 | Item | JSON path (text) shop-api / worker / queue-worker | – |
 | Item | JSON path (number) search | – |
 | Trigger | JSON value for shop-api does not match expected value (text) | HIGH |
-| Trigger | JSON value for search does not match expected value (number) | HIGH |
+| Trigger | JSON value for search is not below expected limit (number) | HIGH |
 | Trigger | JSON value for worker does not match expected value (text) | HIGH |
 | Trigger | JSON value for queue-worker matches prohibited value (text) | HIGH |
 | Trigger | Missing JSON value for shop-api / search / worker / queue-worker | WARNING |
 
-The **does not match expected value** triggers fire when `shop-api`, `search` or `worker` differs from `UP`, `0` or
-`true` respectively. For `queue-worker`, the configured comparison is `<> "FULL"`, so its **matches prohibited value**
+The **does not match expected value** triggers fire when `shop-api` / `worker` differs from `UP` / `true` respectively.
+For `search`, the trigger **is not below expected limit** will fire if 10 or more tasks are reported as failed.
+For `queue-worker`, the configured comparison is `<> "FULL"`, so its **matches prohibited value**
 trigger fires when the selected value is `FULL`.
 A separate **Missing JSON value** trigger fires with severity WARNING when no value has arrived for 3 minutes,
 for example because the service is down, the body is not JSON or the path does not match.
@@ -522,6 +543,10 @@ depending on its configuration.
 | Enable json_text NOT EQUALS assertion | `{#JSON_OPERATOR_TEXT}` is `<>` | **JSON value for {#NAME} matches prohibited value (text)** is discovered |
 | Enable json_number EQUALS assertion | `{#JSON_OPERATOR_NUMBER}` is `=` | **JSON value for {#NAME} does not match expected value (number)** is discovered |
 | Enable json_number NOT EQUALS assertion | `{#JSON_OPERATOR_NUMBER}` is `<>` | **JSON value for {#NAME} matches prohibited value (number)** is discovered |
+| Enable json_number LESS THAN assertion | `{#JSON_OPERATOR_NUMBER}` is `<` | **JSON value for {#NAME} is not below expected limit (number)** is discovered |
+| Enable json_number LESS THAN OR EQUALS assertion | `{#JSON_OPERATOR_NUMBER}` is `<=` | **JSON value for {#NAME} exceeds expected maximum (number)** is discovered |
+| Enable json_number GREATER THAN assertion | `{#JSON_OPERATOR_NUMBER}` is `>` | **JSON value for {#NAME} is not above expected limit (number)** is discovered |
+| Enable json_number GREATER THAN OR EQUALS assertion | `{#JSON_OPERATOR_NUMBER}` is `>=` | **JSON value for {#NAME} is below expected minimum (number)** is discovered |
 
 
 <details>
@@ -563,6 +588,10 @@ body, then a *JSONPath* step applies `{#JSON_PATH_TEXT}` or `{#JSON_PATH_NUMBER}
 | JSON value for {#NAME} matches prohibited value (text) | HIGH | Discovered for `json_text.operator: "<>"`; the last text value equals `json_text.expect`. |
 | JSON value for {#NAME} does not match expected value (number) | HIGH | Discovered for `json_number.operator: "="` (default); the last numeric value differs from `json_number.expect`. |
 | JSON value for {#NAME} matches prohibited value (number) | HIGH | Discovered for `json_number.operator: "<>"`; the last numeric value equals `json_number.expect`. |
+| JSON value for {#NAME} is not below expected limit (number) | HIGH | Discovered for `json_number.operator: "<"`; the last numeric value is greater than or equal to `json_number.expect`. |
+| JSON value for {#NAME} exceeds expected maximum (number) | HIGH | Discovered for `json_number.operator: "<="`; the last numeric value is greater than `json_number.expect`. |
+| JSON value for {#NAME} is not above expected limit (number) | HIGH | Discovered for `json_number.operator: ">"`; the last numeric value is less than or equal to `json_number.expect`. |
+| JSON value for {#NAME} is below expected minimum (number) | HIGH | Discovered for `json_number.operator: ">="`; the last numeric value is less than `json_number.expect`. |
 
 </details>
 

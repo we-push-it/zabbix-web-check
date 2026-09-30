@@ -63,7 +63,7 @@ for (var key in configData) {
         // allow overriding the operator
         if (item.json_number.hasOwnProperty("operator")) {
             // noinspection JSUndeclaredVariable intentionally not defined with var so it can be delete'd
-            validOperators = ["=", "<>"];
+            validOperators = ["=", "<>", "<", "<=", ">", ">="];
             if (validOperators.indexOf(item.json_number.operator) === -1) {
                 throw 'Unsupported operator "' + item.json_number.operator + '" in ' + key + '.json_number.operator';
             }

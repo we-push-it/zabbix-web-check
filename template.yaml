@@ -225,6 +225,42 @@ zabbix_export:
                   description: |
                     The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service matches the prohibited
                     value "{#EXPECT_VALUE_NUMBER}".
+                - uuid: f9f4429faf20486d8f574e5a055d5eea
+                  expression: |
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number[{#NAME}])>={#EXPECT_VALUE_NUMBER}
+                  name: 'JSON value for {#NAME} is not below expected limit (number)'
+                  priority: HIGH
+                  discover: NO_DISCOVER
+                  description: |
+                    The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service must be less than
+                    {#EXPECT_VALUE_NUMBER}, but is greater than or equal to that limit.
+                - uuid: 2c87fac4270d44e38810fcb6e3698623
+                  expression: |
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number[{#NAME}])>{#EXPECT_VALUE_NUMBER}
+                  name: 'JSON value for {#NAME} exceeds expected maximum (number)'
+                  priority: HIGH
+                  discover: NO_DISCOVER
+                  description: |
+                    The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service must be less than or
+                    equal to {#EXPECT_VALUE_NUMBER}, but exceeds that limit.
+                - uuid: a0e9315f06b9422d9c26878a52bb4cf0
+                  expression: |
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number[{#NAME}])<={#EXPECT_VALUE_NUMBER}
+                  name: 'JSON value for {#NAME} is not above expected limit (number)'
+                  priority: HIGH
+                  discover: NO_DISCOVER
+                  description: |
+                    The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service must be greater than
+                    {#EXPECT_VALUE_NUMBER}, but is less than or equal to that limit.
+                - uuid: 1dc538495f45492e9abf7069061fbf03
+                  expression: |
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number[{#NAME}])<{#EXPECT_VALUE_NUMBER}
+                  name: 'JSON value for {#NAME} is below expected minimum (number)'
+                  priority: HIGH
+                  discover: NO_DISCOVER
+                  description: |
+                    The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service must be greater than or
+                    equal to {#EXPECT_VALUE_NUMBER}, but is below that limit.
           parameters:
             - name: config
               value: '{$PUSHIT.WEBCHECK.CONFIG}'
@@ -302,6 +338,50 @@ zabbix_export:
                 - operationobject: TRIGGER_PROTOTYPE
                   operator: REGEXP
                   value: '^JSON value for .*? matches prohibited value \(number\)$'
+                  discover: DISCOVER
+            - name: 'Enable json_number LESS THAN assertion'
+              step: '8'
+              filter:
+                conditions:
+                  - macro: '{#JSON_OPERATOR_NUMBER}'
+                    value: ^<$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: '^JSON value for .*? is not below expected limit \(number\)$'
+                  discover: DISCOVER
+            - name: 'Enable json_number LESS THAN OR EQUALS assertion'
+              step: '9'
+              filter:
+                conditions:
+                  - macro: '{#JSON_OPERATOR_NUMBER}'
+                    value: ^<=$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: '^JSON value for .*? exceeds expected maximum \(number\)$'
+                  discover: DISCOVER
+            - name: 'Enable json_number GREATER THAN assertion'
+              step: '10'
+              filter:
+                conditions:
+                  - macro: '{#JSON_OPERATOR_NUMBER}'
+                    value: ^>$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: '^JSON value for .*? is not above expected limit \(number\)$'
+                  discover: DISCOVER
+            - name: 'Enable json_number GREATER THAN OR EQUALS assertion'
+              step: '11'
+              filter:
+                conditions:
+                  - macro: '{#JSON_OPERATOR_NUMBER}'
+                    value: ^>=$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: '^JSON value for .*? is below expected minimum \(number\)$'
                   discover: DISCOVER
 
       macros:
