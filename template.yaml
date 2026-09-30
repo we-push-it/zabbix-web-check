@@ -164,24 +164,24 @@ zabbix_export:
                   description: |
                     The value at "{#JSON_PATH_TEXT}" in the response of the monitored service was not available for more
                     than {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}.
-                - uuid: 9a42683503184a378dc57cc56f3b0d6b
+                - uuid: 4952237d989a430ca7a26365ce251990
                   expression: |
-                    (
-                      "{#JSON_OPERATOR_TEXT}" = "="
-                      and
-                      last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text[{#NAME}])<>"{#EXPECT_VALUE_TEXT}"
-                    )
-                    or
-                    (
-                      "{#JSON_OPERATOR_TEXT}" = "<>"
-                      and
-                      last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text[{#NAME}])="{#EXPECT_VALUE_TEXT}"
-                    )
-                  name: 'Unexpected JSON value for {#NAME}'
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text[{#NAME}])<>"{#EXPECT_VALUE_TEXT}"
+                  name: 'JSON value for {#NAME} does not match expected value (text)'
                   priority: HIGH
+                  discover: NO_DISCOVER
                   description: |
-                    The value at "{#JSON_PATH_TEXT}" in the response of the monitored service does not satisfy the
-                    condition "{#JSON_OPERATOR_TEXT} {#EXPECT_VALUE_TEXT}".
+                    The value at "{#JSON_PATH_TEXT}" in the response of the monitored service does not match the
+                    expected value "{#EXPECT_VALUE_TEXT}".
+                - uuid: da42163600d148818d06da0adfbffc42
+                  expression: |
+                      last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text[{#NAME}])="{#EXPECT_VALUE_TEXT}"
+                  name: 'JSON value for {#NAME} matches prohibited value (text)'
+                  priority: HIGH
+                  discover: NO_DISCOVER
+                  description: |
+                    The value at "{#JSON_PATH_TEXT}" in the response of the monitored service matches the prohibited
+                    value "{#EXPECT_VALUE_TEXT}".
             - uuid: 924b1fa1897f441388287043b06567f0
               name: 'JSON path (number) {#NAME}'
               type: DEPENDENT
@@ -207,24 +207,24 @@ zabbix_export:
                   description: |
                     The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service was not available for
                     more than {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}.
-                - uuid: 7876fe6d74884c6db53c77a78072dfac
+                - uuid: 5fb89ee56ac94b8d9e716ca51dc7f685
                   expression: |
-                    (
-                      "{#JSON_OPERATOR_NUMBER}" = "="
-                      and
-                      last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number[{#NAME}])<>{#EXPECT_VALUE_NUMBER}
-                    )
-                    or
-                    (
-                      "{#JSON_OPERATOR_NUMBER}" = "<>"
-                      and
-                      last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number[{#NAME}])={#EXPECT_VALUE_NUMBER}
-                    )
-                  name: 'Unexpected JSON value for {#NAME}'
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number[{#NAME}])<>{#EXPECT_VALUE_NUMBER}
+                  name: 'JSON value for {#NAME} does not match expected value (number)'
                   priority: HIGH
+                  discover: NO_DISCOVER
                   description: |
-                    The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service does not satisfy the
-                    condition "{#JSON_OPERATOR_NUMBER} {#EXPECT_VALUE_NUMBER}".
+                    The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service does not match the
+                    expected value "{#EXPECT_VALUE_NUMBER}".
+                - uuid: 0cefa5a1d58446be8ea2762cafdf0b62
+                  expression: |
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number[{#NAME}])={#EXPECT_VALUE_NUMBER}
+                  name: 'JSON value for {#NAME} matches prohibited value (number)'
+                  priority: HIGH
+                  discover: NO_DISCOVER
+                  description: |
+                    The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service matches the prohibited
+                    value "{#EXPECT_VALUE_NUMBER}".
           parameters:
             - name: config
               value: '{$PUSHIT.WEBCHECK.CONFIG}'
@@ -258,6 +258,50 @@ zabbix_export:
               operations:
                 - operator: REGEXP
                   value: '^JSON path \(number\).*$'
+                  discover: DISCOVER
+            - name: 'Enable json_text EQUALS assertion'
+              step: '4'
+              filter:
+                conditions:
+                  - macro: '{#JSON_OPERATOR_TEXT}'
+                    value: ^=$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: '^JSON value for .*? does not match expected value \(text\)$'
+                  discover: DISCOVER
+            - name: 'Enable json_text NOT EQUALS assertion'
+              step: '5'
+              filter:
+                conditions:
+                  - macro: '{#JSON_OPERATOR_TEXT}'
+                    value: ^<>$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: '^JSON value for .*? matches prohibited value \(text\)$'
+                  discover: DISCOVER
+            - name: 'Enable json_number EQUALS assertion'
+              step: '6'
+              filter:
+                conditions:
+                  - macro: '{#JSON_OPERATOR_NUMBER}'
+                    value: ^=$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: '^JSON value for .*? does not match expected value \(number\)$'
+                  discover: DISCOVER
+            - name: 'Enable json_number NOT EQUALS assertion'
+              step: '7'
+              filter:
+                conditions:
+                  - macro: '{#JSON_OPERATOR_NUMBER}'
+                    value: ^<>$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: '^JSON value for .*? matches prohibited value \(number\)$'
                   discover: DISCOVER
 
       macros:

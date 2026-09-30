@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 `pushit.webcheck.http.json_path` to `pushit.webcheck.http.json_path_text` and the internal type `json_path` to
 `json_path_text`. **Data loss:** This change leads to loosing history of the renamed items.
 - Separate `nodata()` checks from actual comparison logic
+- **Data loss:** Triggers got redesigned when support for configurable comparison operators were added. This will lead
+to the history of triggers being lost.
 
 ## [v0.2.0] - 2026-09-29
 ### Changed

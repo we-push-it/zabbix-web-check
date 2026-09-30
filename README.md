@@ -74,8 +74,10 @@ flowchart LR
 
     subgraph TRG ["Triggers"]
         T1{{"Unexpected status code<br/>HIGH"}}
-        T2{{"Unexpected JSON value<br/>HIGH"}}
-        T6{{"Unexpected JSON value<br/>HIGH"}}
+        T2{{"JSON value does not match expected value (text)<br/>HIGH"}}
+        T6{{"JSON value does not match expected value (number)<br/>HIGH"}}
+        T9{{"JSON value matches prohibited value (text)<br/>HIGH"}}
+        T10{{"JSON value matches prohibited value (number)<br/>HIGH"}}
         T7{{"Missing JSON value<br/>WARNING"}}
         T8{{"Missing JSON value<br/>WARNING"}}
         T3{{"Certificate data unavailable<br/>INFO"}}
@@ -92,11 +94,15 @@ flowchart LR
     CRAW --> NA & VAL
     NA --> DAYS
     ST --> T1
-    JP --> T2 & T7
+    JP -->|"operator is = (default)"| T2
+    JP -->|"operator is <>"| T9
+    JP --> T7
     CRAW --> T3
     VAL --> T4
     DAYS --> T5
-    JP_num --> T6 & T8
+    JP_num -->|"operator is = (default)"| T6
+    JP_num -->|"operator is <>"| T10
+    JP_num --> T8
 ```
 
 Step by step:
@@ -231,10 +237,9 @@ compares values in it. The status code is not evaluated by this check.
 | Key | Description |
 |---|---|
 | `path` | [Zabbix JSONPath] expression selecting the value, for example `$.status` or `$.components.db.status`. Use a definite path: an expression that returns a list yields a JSON array as text, which is hard to compare. |
-| `expect` | Value to compare against, as a string (`json_text`) or number (`json_number`). JSON strings and booleans arrive without quotes (`UP`, `true`), numbers as numbers (`0`). A value that does not satisfy the configured comparison raises **Unexpected JSON value for {#NAME}** (HIGH). |
+| `expect` | Value to compare against, as a string (`json_text`) or number (`json_number`). JSON strings and booleans arrive without quotes (`UP`, `true`), numbers as numbers (`0`). A value that does not satisfy the configured comparison raises a problem on HIGH level. |
 | `operator` | Overrides the comparison operator from `"="` (the default). Supported values: `=`, `<>` |
 
-A value that fails the comparison raises **Unexpected JSON value for {#NAME}** (HIGH).
 If no value arrives for `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}` (default `3m`), a separate trigger raises
 **Missing JSON value for {#NAME}** (WARNING). This applies to both text and numeric checks.
 
@@ -359,11 +364,15 @@ a queue-worker, which must *not* report the queue status as "full" (`{"queueStat
 | Item | Response shop-api / search / worker| – |
 | Item | JSON path (text) shop-api / worker / queue-worker | – |
 | Item | JSON path (number) search | – |
-| Trigger | Unexpected JSON value for shop-api / search / worker / queue-worker | HIGH |
+| Trigger | JSON value for shop-api does not match expected value (text) | HIGH |
+| Trigger | JSON value for search does not match expected value (number) | HIGH |
+| Trigger | JSON value for worker does not match expected value (text) | HIGH |
+| Trigger | JSON value for queue-worker matches prohibited value (text) | HIGH |
 | Trigger | Missing JSON value for shop-api / search / worker / queue-worker | WARNING |
 
-The trigger fires when `shop-api`, `search` or `worker` differs from `UP`, `0` or `true` respectively.
-For `queue-worker`, the configured comparison is `<> "FULL"`, so the trigger fires when the selected value is `FULL`.
+The **does not match expected value** triggers fire when `shop-api`, `search` or `worker` differs from `UP`, `0` or
+`true` respectively. For `queue-worker`, the configured comparison is `<> "FULL"`, so its **matches prohibited value**
+trigger fires when the selected value is `FULL`.
 A separate **Missing JSON value** trigger fires with severity WARNING when no value has arrived for 3 minutes,
 for example because the service is down, the body is not JSON or the path does not match.
 
@@ -509,6 +518,11 @@ depending on its configuration.
 | Enable http_status | Configuration contains `expectStatus` key | Item prototypes whose name matches `^HTTP status.*$` are discovered |
 | Enable json_path_text | Configuration contains `json_text` key | Item prototypes whose name matches `^JSON path \(text\).*$` are discovered |
 | Enable json_path_number | Configuration contains `json_number` key | Item prototypes whose name matches `^JSON path \(number\).*$` are discovered |
+| Enable json_text EQUALS assertion | `{#JSON_OPERATOR_TEXT}` is `=` | **JSON value for {#NAME} does not match expected value (text)** is discovered |
+| Enable json_text NOT EQUALS assertion | `{#JSON_OPERATOR_TEXT}` is `<>` | **JSON value for {#NAME} matches prohibited value (text)** is discovered |
+| Enable json_number EQUALS assertion | `{#JSON_OPERATOR_NUMBER}` is `=` | **JSON value for {#NAME} does not match expected value (number)** is discovered |
+| Enable json_number NOT EQUALS assertion | `{#JSON_OPERATOR_NUMBER}` is `<>` | **JSON value for {#NAME} matches prohibited value (number)** is discovered |
+
 
 <details>
 <summary><strong>HTTP Status</strong>: items and triggers</summary>
@@ -545,7 +559,10 @@ body, then a *JSONPath* step applies `{#JSON_PATH_TEXT}` or `{#JSON_PATH_NUMBER}
 | Trigger | Severity | Condition |
 |---|---|---|
 | Missing JSON value for {#NAME} | WARNING | No value for `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}`. |
-| Unexpected JSON value for {#NAME} | HIGH | The last value does not satisfy the configured comparison. |
+| JSON value for {#NAME} does not match expected value (text) | HIGH | Discovered for `json_text.operator: "="` (default); the last text value differs from `json_text.expect`. |
+| JSON value for {#NAME} matches prohibited value (text) | HIGH | Discovered for `json_text.operator: "<>"`; the last text value equals `json_text.expect`. |
+| JSON value for {#NAME} does not match expected value (number) | HIGH | Discovered for `json_number.operator: "="` (default); the last numeric value differs from `json_number.expect`. |
+| JSON value for {#NAME} matches prohibited value (number) | HIGH | Discovered for `json_number.operator: "<>"`; the last numeric value equals `json_number.expect`. |
 
 </details>
 
