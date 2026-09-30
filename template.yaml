@@ -156,10 +156,16 @@ zabbix_export:
               master_item:
                 key: 'web.page.get["{#URL}"]'
               trigger_prototypes:
-                - uuid: 9a42683503184a378dc57cc56f3b0d6b
+                - uuid: 302aad4bd03348a8b5da8c8fb1e3d5ba
                   expression: |
                     nodata(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text[{#NAME}],{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE})=1
-                    or
+                  name: 'Missing JSON value for {#NAME}'
+                  priority: WARNING
+                  description: |
+                    The value at "{#JSON_PATH_TEXT}" in the response of the monitored service was not available for more
+                    than {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}.
+                - uuid: 9a42683503184a378dc57cc56f3b0d6b
+                  expression: |
                     (
                       "{#JSON_OPERATOR_TEXT}" = "="
                       and
@@ -175,8 +181,7 @@ zabbix_export:
                   priority: HIGH
                   description: |
                     The value at "{#JSON_PATH_TEXT}" in the response of the monitored service does not satisfy the
-                    condition "{#JSON_OPERATOR_TEXT} {#EXPECT_VALUE_TEXT}" or no response is available for more than
-                    {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}.
+                    condition "{#JSON_OPERATOR_TEXT} {#EXPECT_VALUE_TEXT}".
             - uuid: 924b1fa1897f441388287043b06567f0
               name: 'JSON path (number) {#NAME}'
               type: DEPENDENT
@@ -194,10 +199,16 @@ zabbix_export:
               master_item:
                 key: 'web.page.get["{#URL}"]'
               trigger_prototypes:
-                - uuid: 7876fe6d74884c6db53c77a78072dfac
+                - uuid: 88adb01d02274961bf3dbadf8f7a92d0
                   expression: |
                     nodata(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number[{#NAME}],{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE})=1
-                    or
+                  name: 'Missing JSON value for {#NAME}'
+                  priority: WARNING
+                  description: |
+                    The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service was not available for
+                    more than {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}.
+                - uuid: 7876fe6d74884c6db53c77a78072dfac
+                  expression: |
                     (
                       "{#JSON_OPERATOR_NUMBER}" = "="
                       and
@@ -213,8 +224,7 @@ zabbix_export:
                   priority: HIGH
                   description: |
                     The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service does not satisfy the
-                    condition "{#JSON_OPERATOR_NUMBER} {#EXPECT_VALUE_NUMBER}" or no response is available for more than
-                    {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}.
+                    condition "{#JSON_OPERATOR_NUMBER} {#EXPECT_VALUE_NUMBER}".
           parameters:
             - name: config
               value: '{$PUSHIT.WEBCHECK.CONFIG}'

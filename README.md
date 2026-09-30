@@ -76,6 +76,8 @@ flowchart LR
         T1{{"Unexpected status code<br/>HIGH"}}
         T2{{"Unexpected JSON value<br/>HIGH"}}
         T6{{"Unexpected JSON value<br/>HIGH"}}
+        T7{{"Missing JSON value<br/>WARNING"}}
+        T8{{"Missing JSON value<br/>WARNING"}}
         T3{{"Certificate data unavailable<br/>INFO"}}
         T4{{"Certificate is invalid<br/>HIGH"}}
         T5{{"Certificate will expire in N or less<br/>N = CERT_WARN / AVG / HIGH_DAYS<br/>WARNING / AVERAGE / HIGH"}}
@@ -90,11 +92,11 @@ flowchart LR
     CRAW --> NA & VAL
     NA --> DAYS
     ST --> T1
-    JP --> T2
+    JP --> T2 & T7
     CRAW --> T3
     VAL --> T4
     DAYS --> T5
-    JP_num --> T6
+    JP_num --> T6 & T8
 ```
 
 Step by step:
@@ -232,6 +234,10 @@ compares values in it. The status code is not evaluated by this check.
 | `expect` | Value to compare against, as a string (`json_text`) or number (`json_number`). JSON strings and booleans arrive without quotes (`UP`, `true`), numbers as numbers (`0`). A value that does not satisfy the configured comparison raises **Unexpected JSON value for {#NAME}** (HIGH). |
 | `operator` | Overrides the comparison operator from `"="` (the default). Supported values: `=`, `<>` |
 
+A value that fails the comparison raises **Unexpected JSON value for {#NAME}** (HIGH).
+If no value arrives for `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}` (default `3m`), a separate trigger raises
+**Missing JSON value for {#NAME}** (WARNING). This applies to both text and numeric checks.
+
 ### Checking a certificate
 
 Opens a TLS connection every `{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}` (default `15m`) with the Zabbix Agent 2 item
@@ -354,10 +360,12 @@ a queue-worker, which must *not* report the queue status as "full" (`{"queueStat
 | Item | JSON path (text) shop-api / worker / queue-worker | – |
 | Item | JSON path (number) search | – |
 | Trigger | Unexpected JSON value for shop-api / search / worker / queue-worker | HIGH |
+| Trigger | Missing JSON value for shop-api / search / worker / queue-worker | WARNING |
 
 The trigger fires when `shop-api`, `search` or `worker` differs from `UP`, `0` or `true` respectively.
 For `queue-worker`, the configured comparison is `<> "FULL"`, so the trigger fires when the selected value is `FULL`.
-All triggers also fire when no value has arrived for 3 minutes.
+A separate **Missing JSON value** trigger fires with severity WARNING when no value has arrived for 3 minutes,
+for example because the service is down, the body is not JSON or the path does not match.
 
 ### 3. Certificate expiry with three thresholds
 
@@ -462,7 +470,7 @@ All macros are defined on the template and can be overridden per host. Time valu
 | `{$PUSHIT.WEBCHECK.CONFIG}` | `{}` | discovery rules | The endpoint configuration, a JSON object. Set this on every host. |
 | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` | `1m` | HTTP status and JSONPath checks | Update interval of the raw item **Response {#NAME}**. |
 | `{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}` | `3m` | HTTP status check | How long a missing status code is tolerated before **Unexpected status code for {#NAME}** fires. Must be larger than `HTTP.INTERVAL`, otherwise it provides no tolerance and can raise false no-data problems. |
-| `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}` | `3m` | JSONPath check | How long a missing response is tolerated before **Unexpected JSON value for {#NAME}** fires. Must be larger than `HTTP.INTERVAL`, otherwise it provides no tolerance and can raise false no-data problems. |
+| `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}` | `3m` | JSONPath check | How long a missing JSON value is tolerated before **Missing JSON value for {#NAME}** (WARNING) fires. Must be larger than `HTTP.INTERVAL`, otherwise it provides no tolerance and can raise false no-data problems. |
 | `{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}` | `15m` | Certificate check | Update interval of the raw item **Certificate data {#NAME}**. |
 | `{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE}` | `30m` | Certificate check | How long missing certificate data is tolerated before **Certificate data for {#NAME} is unavailable** (INFO) fires. Must be larger than `CERTIFICATE.INTERVAL` and smaller than `CERTIFICATE.HISTORY`. |
 | `{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}` | `90m` | Certificate check | History retention of the raw certificate JSON only. Must be larger than `CERTIFICATE.NO_DATA_GRACE`, should be larger than `CERTIFICATE.INTERVAL` and must be at least `1h`. The derived items are not affected. |
@@ -536,7 +544,8 @@ body, then a *JSONPath* step applies `{#JSON_PATH_TEXT}` or `{#JSON_PATH_NUMBER}
 
 | Trigger | Severity | Condition |
 |---|---|---|
-| Unexpected JSON value for {#NAME} | HIGH | No value for `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}`, or the last value does not satisfy the configured comparison. |
+| Missing JSON value for {#NAME} | WARNING | No value for `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}`. |
+| Unexpected JSON value for {#NAME} | HIGH | The last value does not satisfy the configured comparison. |
 
 </details>
 
