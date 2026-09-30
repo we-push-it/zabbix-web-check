@@ -54,7 +54,7 @@ flowchart LR
     CFG(["Host macro<br/>{$PUSHIT.WEBCHECK.CONFIG}<br/>JSON object, one named property per endpoint"])
 
     subgraph LLD ["Discovery rules, every 10m"]
-        DH["HTTP<br/>json_text or expectStatus top-level-key present"]
+        DH["HTTP<br/>json_text, json_number or expectStatus top-level-key present"]
         DC["Certificate<br/>certificate top-level-key present"]
     end
 
@@ -62,6 +62,7 @@ flowchart LR
         RAW["Response {#NAME}<br/>web.page.get"]
         ST["HTTP status {#NAME}<br/>status line regex"]
         JP["JSON path (text) {#NAME}<br/>body + JSONPath"]
+        JP_num["JSON path (number) {#NAME}<br/>body + JSONPath"]
     end
 
     subgraph CI ["Certificate items, raw data every CERTIFICATE.INTERVAL"]
@@ -74,6 +75,7 @@ flowchart LR
     subgraph TRG ["Triggers"]
         T1{{"Unexpected status code<br/>HIGH"}}
         T2{{"Unexpected JSON value<br/>HIGH"}}
+        T6{{"Unexpected JSON value<br/>HIGH"}}
         T3{{"Certificate data unavailable<br/>INFO"}}
         T4{{"Certificate is invalid<br/>HIGH"}}
         T5{{"Certificate will expire in N or less<br/>N = CERT_WARN / AVG / HIGH_DAYS<br/>WARNING / AVERAGE / HIGH"}}
@@ -83,6 +85,7 @@ flowchart LR
     DH --> RAW
     RAW -->|expectStatus present| ST
     RAW -->|json_text present| JP
+    RAW -->|json_number present| JP_num
     DC --> CRAW
     CRAW --> NA & VAL
     NA --> DAYS
@@ -91,6 +94,7 @@ flowchart LR
     CRAW --> T3
     VAL --> T4
     DAYS --> T5
+    JP_num --> T6
 ```
 
 Step by step:
@@ -100,8 +104,8 @@ Step by step:
 3. **Raw items.** Each entry gets one Zabbix agent item that talks to the endpoint: `web.page.get["{#URL}"]` for
    HTTP status and JSON path entries, `web.certificate.get["{#URL}"]` for certificate entries.
 4. **Derived items.** Dependent items extract the interesting part with preprocessing (regular expression and
-   JSONPath). Two overrides in the HTTP rule enable the dependent item prototypes corresponding to the checks configured
-   for the entry. The certificate rule adds a calculated item that turns the `notAfter` timestamp into days.
+   JSONPath). Overrides in the HTTP rule enable the dependent item prototypes corresponding to the checks configured for
+   the entry. The certificate rule adds a calculated item that turns the `notAfter` timestamp into days.
 5. **Triggers.** Trigger prototypes compare the values with your expectations and also raise a problem when no value has
    arrived for longer than the grace period.
 6. **Cleanup.** Lost resources are deleted immediately: remove an entry from the macro and its items, triggers and
@@ -119,7 +123,7 @@ From download to the first problem in Zabbix in six steps.
 | Requirement | Why |
 |---|---|
 | Zabbix server 7.4 or later | The template file format requires Zabbix 7.4 or later.  |
-| A Zabbix agent on the monitored host | `http_status` and `json_path_text` use `web.page.get`, available in the classic Zabbix agent and in Zabbix agent 2. |
+| A Zabbix agent on the monitored host | `http_status` and `json_path_text` / `json_path_number` use `web.page.get`, available in the classic Zabbix agent and in Zabbix agent 2. |
 | Zabbix agent 2 for `certificate` checks | `web.certificate.get` exists in Zabbix agent 2 only. |
 | An agent interface on the host | All collecting items are passive *Zabbix agent* items, so the server or proxy must be able to poll the agent. |
 | A network path from the agent to the endpoints | Requests are made from the agent, not from the Zabbix server or proxy. `localhost` is the monitored host itself. |
@@ -201,10 +205,10 @@ and compares the status code from the first line of the response. The body is no
 
 ### Checking a specific field in JSON
 
-This check is enabled by setting `json_text`. Some status pages provide a machine-readable JSON version. You can use this
-check to query a specific field described by a [Zabbix JSONPath]. It fetches the URL every
+This check is enabled by setting `json_text` and/or `json_number`. Some status pages provide a machine-readable JSON
+version. You can use this check to query a specific field described by a [Zabbix JSONPath]. It fetches the URL every
 `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` (default `1m`) with the same `web.page.get` item, treats the body as JSON and
-compares one value in it. The status code is not evaluated by this check.
+compares values in it. The status code is not evaluated by this check.
 
 ```json
 {
@@ -213,6 +217,10 @@ compares one value in it. The status code is not evaluated by this check.
     "json_text": {
       "path": "$.status",
       "expect": "healthy"
+    },
+    "json_number": {
+      "path": "$.unhealthyNodes",
+      "expect": 0
     }
   }
 }
@@ -221,7 +229,7 @@ compares one value in it. The status code is not evaluated by this check.
 | Key | Description |
 |---|---|
 | `path` | [Zabbix JSONPath] expression selecting the value, for example `$.status` or `$.components.db.status`. Use a definite path: an expression that returns a list yields a JSON array as text, which is hard to compare. |
-| `expect` | Expected value, compared as a string. JSON strings arrive without quotes (`UP`), booleans and numbers as text (`true`, `200`). A mismatch raises **Unexpected JSON value for {#NAME}** (HIGH). |
+| `expect` | Expected value, compared as a string (`json_text`) or number (`json_number`). JSON strings and booleans arrive without quotes (`UP`, `true`), numbers as numbers (`0`). A mismatch raises **Unexpected JSON value for {#NAME}** (HIGH). |
 
 ### Checking a certificate
 
@@ -299,7 +307,7 @@ Any status code works as expectation. An endpoint behind authentication, for exa
 ### 2. JSON health endpoints
 
 Spring Boot Actuator answers `GET /actuator/health` with a body such as `{"status":"UP"}`. The first entry selects
-`$.status` and expects `UP`. The second watches an Elasticsearch node whose cluster health must be `green`, the
+`$.status` and expects `UP`. The second watches a cluster which must not have any unhealthy nodes, the
 third reads a boolean from a body like `{"ready":true}`, which is compared as the string `"true"`. All three
 endpoints must answer without authentication.
 
@@ -314,9 +322,9 @@ endpoints must answer without authentication.
   },
   "search": {
     "url": "http://localhost:9200/_cluster/health",
-    "json_text": {
-      "path": "$.status",
-      "expect": "green"
+    "json_number": {
+      "path": "$.unhealthyNodes",
+      "expect": 0
     }
   },
   "worker": {
@@ -334,10 +342,11 @@ endpoints must answer without authentication.
 | Object | Name | Severity |
 |---|---|---|
 | Item | Response shop-api / search / worker| – |
-| Item | JSON path (text) shop-api / search / worker | – |
+| Item | JSON path (text) shop-api / worker | – |
+| Item | JSON path (number) search | – |
 | Trigger | Unexpected JSON value for shop-api / search / worker | HIGH |
 
-The trigger fires when the selected value differs from `UP` / `green` / `true`, and also when no value has arrived for
+The trigger fires when the selected value differs from `UP` / `0` / `true`, and also when no value has arrived for
 3 minutes, for example because the service is down, the body is not JSON or the path does not match.
 
 ### 3. Certificate expiry with three thresholds
@@ -394,10 +403,10 @@ which Actuator only includes when `management.endpoint.health.show-components` o
     }
   },
   "orders-api": {
-    "url": "http://localhost:8080/actuator/health",
-    "json_text": {
-      "path": "$.status",
-      "expect": "UP"
+    "url": "http://localhost:8080/health",
+    "json_number": {
+      "path": "$.failedOrders",
+      "expect": 0
     }
   },
   "billing-db": {
@@ -473,14 +482,15 @@ Two rules follow from this:
 Every discovered object carries the name (top level key) of its entry, so items and triggers of different services never
 collide and are easy to tell apart in *Latest data* and *Problems*.
 
-The **HTTP** rule creates its two dependent prototypes with *Discover* set to *No* and enables the applicable prototypes
-through overrides. Each HTTP entry therefore gets the raw item plus the HTTP status item, the JSONPath item, or both,
+The **HTTP** rule creates its dependent prototypes with *Discover* set to *No* and enables the applicable prototypes
+through overrides. Each HTTP entry therefore gets the raw item plus the HTTP status item, the JSONPath item(s), or both,
 depending on its configuration.
 
 | Override | Condition | Effect |
 |---|---|---|
 | Enable http_status | Configuration contains `expectStatus` key | Item prototypes whose name matches `^HTTP status.*$` are discovered |
 | Enable json_path_text | Configuration contains `json_text` key | Item prototypes whose name matches `^JSON path \(text\).*$` are discovered |
+| Enable json_path_number | Configuration contains `json_number` key | Item prototypes whose name matches `^JSON path \(number\).*$` are discovered |
 
 <details>
 <summary><strong>HTTP Status</strong>: items and triggers</summary>
@@ -507,14 +517,16 @@ three-digit status code from the status line with one *Regular expression* prepr
 |---|---|---|---|---|---|
 | Response {#NAME} | `web.page.get["{#URL}"]` | Zabbix agent | Text | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` | none |
 | JSON path (text) {#NAME} | `pushit.webcheck.http.json_path_text[{#NAME}]` | Dependent on Response {#NAME} | Text | with the master item | 31d (Zabbix default) |
+| JSON path (number) {#NAME} | `pushit.webcheck.http.json_path_number[{#NAME}]` | Dependent on Response {#NAME} | Float | with the master item | 31d (Zabbix default) |
 
-**Response {#NAME}** is the same raw item as for `http_status`. **JSON path (text) {#NAME}** has two preprocessing steps: a
+**Response {#NAME}** is the same raw item as for `http_status`. **JSON path (text) {#NAME}** and
+**JSON path (number) {#NAME}** have two preprocessing steps: a
 *Regular expression* step with the pattern `\r?\n\r?\n([\s\S]*)` and the output `\1` drops the headers and keeps the
-body, then a *JSONPath* step applies `{#JSON_PATH_TEXT}`.
+body, then a *JSONPath* step applies `{#JSON_PATH_TEXT}` or `{#JSON_PATH_NUMBER}`.
 
 | Trigger | Severity | Condition |
 |---|---|---|
-| Unexpected JSON value for {#NAME} | HIGH | No value for `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}`, or the last value differs from `json_text.expect`. |
+| Unexpected JSON value for {#NAME} | HIGH | No value for `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}`, or the last value differs from `json_text.expect` / `json_number.expect`. |
 
 </details>
 

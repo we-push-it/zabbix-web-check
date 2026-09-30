@@ -40,6 +40,14 @@ for (var key in configData) {
         outputItem["{#EXPECT_VALUE_TEXT}"] = item.json_text.expect;
     }
 
+    // json_path_number check
+    if (item.hasOwnProperty("json_number")) {
+        checkTypes.push("json_path_number");
+        requireFields(item.json_number, ["path", "expect"], key);
+        outputItem["{#JSON_PATH_NUMBER}"] = item.json_number.path;
+        outputItem["{#EXPECT_VALUE_NUMBER}"] = item.json_number.expect;
+    }
+
     // certificate check
     if (item.hasOwnProperty("certificate")) {
         checkTypes.push("certificate");
