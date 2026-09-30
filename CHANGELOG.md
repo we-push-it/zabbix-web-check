@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added
 - Support for numeric values in the JSONPath check
+- Option to override the comparison operator on JSONPath checks
+- Support for the equality ("=", default) and inequality ("<>") operators
 
 ### Changed
 - **BC!** Configuration format changed from list of LLD objects to JSON object

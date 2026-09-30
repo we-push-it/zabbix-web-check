@@ -229,7 +229,8 @@ compares values in it. The status code is not evaluated by this check.
 | Key | Description |
 |---|---|
 | `path` | [Zabbix JSONPath] expression selecting the value, for example `$.status` or `$.components.db.status`. Use a definite path: an expression that returns a list yields a JSON array as text, which is hard to compare. |
-| `expect` | Expected value, compared as a string (`json_text`) or number (`json_number`). JSON strings and booleans arrive without quotes (`UP`, `true`), numbers as numbers (`0`). A mismatch raises **Unexpected JSON value for {#NAME}** (HIGH). |
+| `expect` | Value to compare against, as a string (`json_text`) or number (`json_number`). JSON strings and booleans arrive without quotes (`UP`, `true`), numbers as numbers (`0`). A value that does not satisfy the configured comparison raises **Unexpected JSON value for {#NAME}** (HIGH). |
+| `operator` | Overrides the comparison operator from `"="` (the default). Supported values: `=`, `<>` |
 
 ### Checking a certificate
 
@@ -308,8 +309,8 @@ Any status code works as expectation. An endpoint behind authentication, for exa
 
 Spring Boot Actuator answers `GET /actuator/health` with a body such as `{"status":"UP"}`. The first entry selects
 `$.status` and expects `UP`. The second watches a cluster which must not have any unhealthy nodes, the
-third reads a boolean from a body like `{"ready":true}`, which is compared as the string `"true"`. All three
-endpoints must answer without authentication.
+third reads a boolean from a body like `{"ready":true}`, which is compared as the string `"true"`. The fourth monitors
+a queue-worker, which must *not* report the queue status as "full" (`{"queueStatus":"FULL"}`).
 
 ```json
 {
@@ -333,21 +334,30 @@ endpoints must answer without authentication.
       "path": "$.ready",
       "expect": "true"
     }
+  },
+  "queue-worker": {
+    "url": "http://localhost:8081/status.json",
+    "json_text": {
+      "path": "$.queueStatus",
+      "expect": "FULL",
+      "operator": "<>"
+    }
   }
 }
 ```
 
-**What you get for `shop-api`** (and the same set for `search` and `worker`)
+**What you get**
 
 | Object | Name | Severity |
 |---|---|---|
 | Item | Response shop-api / search / worker| – |
-| Item | JSON path (text) shop-api / worker | – |
+| Item | JSON path (text) shop-api / worker / queue-worker | – |
 | Item | JSON path (number) search | – |
-| Trigger | Unexpected JSON value for shop-api / search / worker | HIGH |
+| Trigger | Unexpected JSON value for shop-api / search / worker / queue-worker | HIGH |
 
-The trigger fires when the selected value differs from `UP` / `0` / `true`, and also when no value has arrived for
-3 minutes, for example because the service is down, the body is not JSON or the path does not match.
+The trigger fires when `shop-api`, `search` or `worker` differs from `UP`, `0` or `true` respectively.
+For `queue-worker`, the configured comparison is `<> "FULL"`, so the trigger fires when the selected value is `FULL`.
+All triggers also fire when no value has arrived for 3 minutes.
 
 ### 3. Certificate expiry with three thresholds
 
@@ -526,7 +536,7 @@ body, then a *JSONPath* step applies `{#JSON_PATH_TEXT}` or `{#JSON_PATH_NUMBER}
 
 | Trigger | Severity | Condition |
 |---|---|---|
-| Unexpected JSON value for {#NAME} | HIGH | No value for `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}`, or the last value differs from `json_text.expect` / `json_number.expect`. |
+| Unexpected JSON value for {#NAME} | HIGH | No value for `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}`, or the last value does not satisfy the configured comparison. |
 
 </details>
 

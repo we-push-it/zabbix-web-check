@@ -38,6 +38,18 @@ for (var key in configData) {
         requireFields(item.json_text, ["path", "expect"], key);
         outputItem["{#JSON_PATH_TEXT}"] = item.json_text.path;
         outputItem["{#EXPECT_VALUE_TEXT}"] = item.json_text.expect;
+        outputItem["{#JSON_OPERATOR_TEXT}"] = "=";
+
+        // allow overriding the operator
+        if (item.json_text.hasOwnProperty("operator")) {
+            // noinspection JSUndeclaredVariable intentionally not defined with var so it can be delete'd
+            validOperators = ["=", "<>"];
+            if (validOperators.indexOf(item.json_text.operator) === -1) {
+                throw 'Unsupported operator "' + item.json_text.operator + '" in ' + key + '.json_text.operator';
+            }
+            outputItem["{#JSON_OPERATOR_TEXT}"] = item.json_text.operator;
+            delete validOperators;
+        }
     }
 
     // json_path_number check
@@ -46,6 +58,18 @@ for (var key in configData) {
         requireFields(item.json_number, ["path", "expect"], key);
         outputItem["{#JSON_PATH_NUMBER}"] = item.json_number.path;
         outputItem["{#EXPECT_VALUE_NUMBER}"] = item.json_number.expect;
+        outputItem["{#JSON_OPERATOR_NUMBER}"] = "=";
+
+        // allow overriding the operator
+        if (item.json_number.hasOwnProperty("operator")) {
+            // noinspection JSUndeclaredVariable intentionally not defined with var so it can be delete'd
+            validOperators = ["=", "<>"];
+            if (validOperators.indexOf(item.json_number.operator) === -1) {
+                throw 'Unsupported operator "' + item.json_number.operator + '" in ' + key + '.json_number.operator';
+            }
+            outputItem["{#JSON_OPERATOR_NUMBER}"] = item.json_number.operator;
+            delete validOperators;
+        }
     }
 
     // certificate check
