@@ -14,6 +14,20 @@ function requireFields(data, fields, endpointName) {
     }
 }
 
+/**
+ * Null-coalescing support for ECMAScript 5
+ * @param {object} obj
+ * @param {string} propertyName
+ * @param {any} fallback
+ * @returns {any}
+ */
+function getWithFallback(obj, propertyName, fallback) {
+    if (obj.hasOwnProperty(propertyName)) {
+        return obj[propertyName];
+    }
+    return fallback;
+}
+
 var configData = JSON.parse(JSON.parse(value).config);
 var output = [];
 
@@ -83,12 +97,12 @@ for (var key in configData) {
 
     if (item.hasOwnProperty("performance")) {
         checkTypes.push("http_performance");
-        requireFields(item.performance, ["nodata", "warning", "average", "high", "disaster"], key);
+        requireFields(item.performance, ["nodata"], key);
         outputItem["{#PERF_NODATA}"] = item.performance.nodata;
-        outputItem["{#PERF_WARN}"] = item.performance.warning;
-        outputItem["{#PERF_AVG}"] = item.performance.average;
-        outputItem["{#PERF_HIGH}"] = item.performance.high;
-        outputItem["{#PERF_DISASTER}"] = item.performance.disaster;
+        outputItem["{#PERF_WARN}"] = getWithFallback(item.performance, 'warning', -1);
+        outputItem["{#PERF_AVG}"] = getWithFallback(item.performance, 'average', -1);
+        outputItem["{#PERF_HIGH}"] = getWithFallback(item.performance, 'high', -1);
+        outputItem["{#PERF_DISASTER}"] = getWithFallback(item.performance, 'disaster', -1);
     }
 
     if (checkTypes.length === 0) {

@@ -428,6 +428,51 @@ zabbix_export:
           parameters:
             - name: config
               value: '{$PUSHIT.WEBCHECK.CONFIG}'
+          overrides:
+            - name: 'Undiscover WARN trigger'
+              step: '1'
+              filter:
+                conditions:
+                  - macro: '{#PERF_WARN}'
+                    value: ^-1$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: 'Performance of .*? exceeds WARN limit'
+                  discover: NO_DISCOVER
+            - name: 'Undiscover AVG trigger'
+              step: '2'
+              filter:
+                conditions:
+                  - macro: '{#PERF_AVG}'
+                    value: ^-1$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: 'Performance of .*? exceeds AVERAGE limit'
+                  discover: NO_DISCOVER
+            - name: 'Undiscover HIGH trigger'
+              step: '3'
+              filter:
+                conditions:
+                  - macro: '{#PERF_HIGH}'
+                    value: ^-1$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: 'Performance of .*? exceeds HIGH limit'
+                  discover: NO_DISCOVER
+            - name: 'Undiscover DISASTER trigger'
+              step: '4'
+              filter:
+                conditions:
+                  - macro: '{#PERF_DISASTER}'
+                    value: ^-1$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: 'Performance of .*? exceeds DISASTER limit'
+                  discover: NO_DISCOVER
 
       macros:
         - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}'

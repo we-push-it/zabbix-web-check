@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for the equality ("=", default) and inequality ("<>") operators
 - Support for numeric comparisons <,>,<= and >=
 - New check type HTTP performance
+- Option to disable independent levels of check type HTTP performance
 
 ### Changed
 - **BC!** Configuration format changed from list of LLD objects to JSON object

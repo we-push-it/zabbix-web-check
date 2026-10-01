@@ -295,7 +295,8 @@ that measures the loading time of the full page in seconds, every `{$PUSHIT.WEBC
 }
 ```
 
-All four keys below are required; there are no default thresholds or default no-data grace period.
+Only the `nodata` key is required; if a key is not given, the related trigger will not be discovered. This allows you to
+decide whether you want all levels or go from warning directly to high - skipping average for example.
 
 | Key | Description |
 |---|---|
