@@ -383,6 +383,51 @@ zabbix_export:
                   operator: REGEXP
                   value: '^JSON value for .*? is below expected minimum \(number\)$'
                   discover: DISCOVER
+        - uuid: 97859698c0824a8fa019ae4fcb2aedca
+          name: Performance
+          type: SCRIPT
+          key: pushit.webcheck.discovery.performance
+          delay: 10m
+          params: |-
+            /* content of discovery_script.js will be put here by Makefile */
+          filter:
+            conditions:
+              - macro: '{#TYPES}'
+                value: '^(.+,)*http_performance(,.+)*$'
+          lifetime_type: DELETE_IMMEDIATELY
+          description: 'Discovery rule for HTTP performance checks for the endpoint'
+          item_prototypes:
+            - uuid: 252b7ac30a05405c91546f13199c172e
+              name: 'HTTP performance {#NAME}'
+              key: 'web.page.perf["{#URL}"]'
+              delay: '{$PUSHIT.WEBCHECK.HTTP.INTERVAL}'
+              value_type: FLOAT
+              trigger_prototypes:
+                - uuid: 8fda601e87fa4a52ae7c1ec2e8085129
+                  expression: nodata(/PUSH IT Webcheck/web.page.perf["{#URL}"],{#PERF_NODATA})=1
+                  name: 'Missing HTTP performance data for {#NAME}'
+                  priority: WARNING
+                  description: |
+                    Performance data for {#NAME} was unavailable for {#PERF_NODATA} or more.
+                - uuid: c014d2e41ba740ce83092e0cfc5fd084
+                  expression: last(/PUSH IT Webcheck/web.page.perf["{#URL}"])>{#PERF_WARN}
+                  name: 'Performance of {#NAME} exceeds WARN limit'
+                  priority: WARNING
+                - uuid: e8fd416c7da241a3b2695a7494fd1820
+                  expression: last(/PUSH IT Webcheck/web.page.perf["{#URL}"])>{#PERF_AVG}
+                  name: 'Performance of {#NAME} exceeds AVERAGE limit'
+                  priority: AVERAGE
+                - uuid: 3353afe283c0411181e96c7326ec4786
+                  expression: last(/PUSH IT Webcheck/web.page.perf["{#URL}"])>{#PERF_HIGH}
+                  name: 'Performance of {#NAME} exceeds HIGH limit'
+                  priority: HIGH
+                - uuid: 2d02dc6a916d4fc2befc5daaa12ad680
+                  expression: last(/PUSH IT Webcheck/web.page.perf["{#URL}"])>{#PERF_DISASTER}
+                  name: 'Performance of {#NAME} exceeds DISASTER limit'
+                  priority: DISASTER
+          parameters:
+            - name: config
+              value: '{$PUSHIT.WEBCHECK.CONFIG}'
 
       macros:
         - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}'

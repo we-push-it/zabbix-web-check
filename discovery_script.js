@@ -81,6 +81,16 @@ for (var key in configData) {
         outputItem["{#CERT_HIGH_DAYS}"] = item.certificate.high;
     }
 
+    if (item.hasOwnProperty("performance")) {
+        checkTypes.push("http_performance");
+        requireFields(item.performance, ["nodata", "warning", "average", "high", "disaster"], key);
+        outputItem["{#PERF_NODATA}"] = item.performance.nodata;
+        outputItem["{#PERF_WARN}"] = item.performance.warning;
+        outputItem["{#PERF_AVG}"] = item.performance.average;
+        outputItem["{#PERF_HIGH}"] = item.performance.high;
+        outputItem["{#PERF_DISASTER}"] = item.performance.disaster;
+    }
+
     if (checkTypes.length === 0) {
         throw "No valid check type "
     }

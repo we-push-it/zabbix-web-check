@@ -13,7 +13,8 @@
 
 **PUSH IT Webcheck** is a Zabbix template for hosts that run web services. Describe the endpoints of a host as a
 JSON object in the macro `{$PUSHIT.WEBCHECK.CONFIG}`, link the template, and low-level discovery creates the items and
-triggers for HTTP status codes, for values inside JSON health responses and for TLS certificate validity and expiry.
+triggers for HTTP status codes, for values inside JSON health responses, for HTTP page load time and for TLS certificate
+validity and expiry.
 All requests are made by the Zabbix agent on the monitored host itself: `http://localhost:8080/health` means port
 8080 on that machine, not on the Zabbix server, so a service bound to `localhost` or to an internal port is as easy
 to check as a public one.
@@ -33,21 +34,22 @@ to check as a public one.
 
 ## ✨ Features
 
-- 🩺 **Three check types.** HTTP Status, JSONPath and Certificate.
+- 🩺 **Four check types.** HTTP Status, JSONPath, HTTP Performance and Certificate.
 - 🧾 **One macro per host.** All endpoints live in `{$PUSHIT.WEBCHECK.CONFIG}`; no item cloning.
 - 🏠 **Runs where the service runs.** Checks are Zabbix agent items, so `http://localhost:8080/health` works without
   exposing anything.
 - 🧹 **Self-cleaning.** Remove an entry from the macro and its items and triggers disappear on the next discovery
   run.
 - 📅 **Three-stage certificate alerts.** WARNING, AVERAGE and HIGH thresholds in days, chosen per endpoint.
+- ⏱️ **Multi-stage performance alerts.** WARNING, AVERAGE, HIGH and DISASTER page load time thresholds in seconds, chosen per endpoint.
 - ⏳ **Grace periods.** A missing response becomes a problem only after a configurable grace period; a wrong value
   is reported immediately.
 - 🎚️ **Tunable with macros.** Intervals and grace periods are user macros you can override per host.
 
 ## 🧭 How it works
 
-The template ships two discovery rules of type *Script*, **HTTP** and **Certificate**. Together they turn the
-endpoint list in `{$PUSHIT.WEBCHECK.CONFIG}` into items and triggers:
+The template ships three discovery rules of type *Script*, **HTTP**, **Certificate** and **Performance**. Together they
+turn the endpoint list in `{$PUSHIT.WEBCHECK.CONFIG}` into items and triggers:
 
 ```mermaid
 flowchart LR
@@ -56,6 +58,7 @@ flowchart LR
     subgraph DISCOVERY ["Discovery rules, every 10m"]
         DRULE_HTTP["HTTP<br/>json_text, json_number or expectStatus top-level-key present"]
         DRULE_CERT["Certificate<br/>certificate top-level-key present"]
+        DRULE_PERF["Performance<br/>performance top-level-key present"]
     end
 
     subgraph HTTP ["HTTP items, every HTTP.INTERVAL"]
@@ -63,6 +66,10 @@ flowchart LR
         ITM_HTTP_STATUS["HTTP status {#NAME}<br/>status line regex"]
         ITM_JSON_TXT["JSON path (text) {#NAME}<br/>body + JSONPath"]
         ITM_JSON_NUM["JSON path (number) {#NAME}<br/>body + JSONPath"]
+    end
+
+    subgraph PERFORMANCE ["Performance items, every HTTP.INTERVAL"]
+        ITM_PERF["HTTP performance {#NAME}<br/>web.page.perf"]
     end
 
     subgraph CERTIFICATE ["Certificate items, raw data every CERTIFICATE.INTERVAL"]
@@ -87,9 +94,11 @@ flowchart LR
         TRG_CERT_ABSENT{{"Certificate data unavailable<br/>INFO"}}
         TRG_CERT_INVALID{{"Certificate is invalid<br/>HIGH"}}
         TRG_CERT_EXPIRY{{"Certificate will expire in N or less<br/>N = CERT_WARN / AVG / HIGH_DAYS<br/>WARNING / AVERAGE / HIGH"}}
+        TRG_PERF_ABSENT{{"Missing HTTP performance data<br/>WARNING"}}
+        TRG_PERF_LIMIT{{"Performance exceeds limit<br/>PERF_WARN / AVG / HIGH / DISASTER<br/>WARNING / AVERAGE / HIGH / DISASTER"}}
     end
 
-    CFG --> DRULE_HTTP & DRULE_CERT
+    CFG --> DRULE_HTTP & DRULE_CERT & DRULE_PERF
     DRULE_HTTP --> ITM_HTTP_RAW
     ITM_HTTP_RAW -->|expectStatus present| ITM_HTTP_STATUS
     ITM_HTTP_RAW -->|json_text present| ITM_JSON_TXT
@@ -111,14 +120,17 @@ flowchart LR
     ITM_JSON_NUM -->|"operator is >"| TRG_NUM_GREATER_THAN
     ITM_JSON_NUM -->|"operator is >="| TRG_NUM_GREATER_OR_EQUAL
     ITM_JSON_NUM --> TRG_NUM_ABSENT
+    DRULE_PERF --> ITM_PERF
+    ITM_PERF --> TRG_PERF_ABSENT & TRG_PERF_LIMIT
 ```
 
 Step by step:
 
 1. **Configuration.** Every endpoint is one JSON object in the host macro `{$PUSHIT.WEBCHECK.CONFIG}`.
-2. **Discovery.** Both rules run every 10 minutes and receive the macro through the script parameter `config`.
-3. **Raw items.** Each entry gets one Zabbix agent item that talks to the endpoint: `web.page.get["{#URL}"]` for
-   HTTP status and JSON path entries, `web.certificate.get["{#URL}"]` for certificate entries.
+2. **Discovery.** All three rules run every 10 minutes and receive the macro through the script parameter `config`.
+3. **Collecting items.** Each entry gets the Zabbix agent items for its configured checks: `web.page.get["{#URL}"]` for
+   HTTP status and JSON path entries, `web.certificate.get["{#URL}"]` for certificate entries and
+   `web.page.perf["{#URL}"]` for performance entries. Performance makes a separate request from HTTP status and JSONPath.
 4. **Derived items.** Dependent items extract the interesting part with preprocessing (regular expression and
    JSONPath). Overrides in the HTTP rule enable the dependent item prototypes corresponding to the checks configured for
    the entry. The certificate rule adds a calculated item that turns the `notAfter` timestamp into days.
@@ -128,7 +140,7 @@ Step by step:
    history are gone after the next discovery run.
 
 Changes to the macro take effect on the next discovery run, at most 10 minutes later, or right away with **Execute now**
-on the two discovery rules.
+on the applicable discovery rules.
 
 ## 🚀 Quick start
 
@@ -139,7 +151,7 @@ From download to the first problem in Zabbix in six steps.
 | Requirement | Why |
 |---|---|
 | Zabbix server 7.4 or later | The template file format requires Zabbix 7.4 or later.  |
-| A Zabbix agent on the monitored host | `http_status` and `json_path_text` / `json_path_number` use `web.page.get`, available in the classic Zabbix agent and in Zabbix agent 2. |
+| A Zabbix agent on the monitored host | HTTP status and JSONPath use `web.page.get`; HTTP Performance uses `web.page.perf`. Both are available in the classic Zabbix agent and in Zabbix agent 2. |
 | Zabbix agent 2 for `certificate` checks | `web.certificate.get` exists in Zabbix agent 2 only. |
 | An agent interface on the host | All collecting items are passive *Zabbix agent* items, so the server or proxy must be able to poll the agent. |
 | A network path from the agent to the endpoints | Requests are made from the agent, not from the Zabbix server or proxy. `localhost` is the monitored host itself. |
@@ -166,8 +178,8 @@ From download to the first problem in Zabbix in six steps.
 
    Click **Update**.
 5. **Run discovery.** Wait for the next run (up to 10 minutes) or open *Data collection → Hosts*, click *Discovery*
-   in the row of your host, select **HTTP** and **Certificate** and click **Execute now**. Give the server a few
-   seconds after saving the macro so that its configuration cache has picked up the new value.
+   in the row of your host, select **HTTP**, **Certificate** and **Performance** and click **Execute now**. Give the
+   server few seconds after saving the macro so that its configuration cache has picked up the new value.
 6. **Check the result.** *Monitoring → Latest data*, filtered by your host, shows **Response app** (the raw HTTP
    response) and **HTTP status app** with the value `200`. If the endpoint answers with a different status code, or
    does not answer at all for more than 3 minutes, *Monitoring → Problems* shows **Unexpected status code for app**
@@ -261,6 +273,40 @@ compares values in it. The status code is not evaluated by this check.
 
 If no value arrives for `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}` (default `3m`), a separate trigger raises
 **Missing JSON value for {#NAME}** (WARNING). This applies to both text and numeric checks.
+
+### Checking HTTP performance
+
+This check is enabled by setting `performance`. The **Performance** discovery rule creates an agent item
+[`web.page.perf`](https://www.zabbix.com/documentation/7.4/en/manual/config/items/itemtypes/zabbix_agent#web.page.perf)
+that measures the loading time of the full page in seconds, every `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` (default `1m`).
+
+```json
+{
+  "my-application": {
+    "url": "https://example.org/health",
+    "performance": {
+      "nodata": "3m",
+      "warning": 0.5,
+      "average": 1,
+      "high": 2,
+      "disaster": 5
+    }
+  }
+}
+```
+
+All four keys below are required; there are no default thresholds or default no-data grace period.
+
+| Key | Description |
+|---|---|
+| `nodata` | No-data grace period as a Zabbix time value, for example `"3m"`. Raises **Missing HTTP performance data for {#NAME}** (WARNING) when no value arrives during this period. Choose a value larger than `HTTP.INTERVAL`. |
+| `warning` | Load time in seconds above which a WARNING problem is raised. Use a JSON number, for example `0.5`. |
+| `average` | Load time in seconds above which an AVERAGE problem is raised. |
+| `high` | Load time in seconds above which a HIGH problem is raised. |
+| `disaster` | Load time in seconds above which a DISASTER problem is raised. |
+
+Choose `warning` < `average` < `high` < `disaster`. Comparisons are strictly `>`: a value equal to a threshold does not
+fire that trigger. The threshold triggers are independent, so a value above `disaster` raises all four problems.
 
 ### Checking a certificate
 
@@ -431,11 +477,11 @@ Warn 30 days before the certificate expires, escalate to AVERAGE at 14 days and 
 The certificate data is fetched every 15 minutes, the days value is recalculated every 6 hours. Use the name the
 certificate was issued for (here `www.example.com`), not `localhost`, otherwise the check reports `invalid`.
 
-### 4. A realistic host: several services, all three types
+### 4. A realistic host: several services, all types
 
-A shop server. The public storefront is checked through its own name, once for the status code and once for the
-certificate. Two Spring Boot services answer with JSON health, a protected admin interface is expected to answer `401`
-without credentials, and an API on port 8443 has a certificate of its own. `billing-db` reads a component status,
+A shop server. The public storefront is checked through its own name for status code, certificate and page load time.
+Two Spring Boot services answer with JSON health, a protected admin interface is expected to answer `401` without
+credentials, and an API on port 8443 has a certificate of its own. `billing-db` reads a component status,
 which Actuator only includes when `management.endpoint.health.show-components` or `show-details` is set to `always`
 (`when-authorized` does not help, the agent sends no credentials).
 
@@ -444,6 +490,13 @@ which Actuator only includes when `management.endpoint.health.show-components` o
   "shop-frontend": {
     "url": "https://shop.example.com",
     "expectStatus": "200",
+    "performance": {
+      "nodata": "3m",
+      "warning": 0.5,
+      "average": 1,
+      "high": 2,
+      "disaster": 5
+    },
     "certificate": {
       "warning": 30,
       "average": 14,
@@ -498,7 +551,7 @@ All macros are defined on the template and can be overridden per host. Time valu
 | Macro | Default | Used by | Purpose |
 |---|---|---|---|
 | `{$PUSHIT.WEBCHECK.CONFIG}` | `{}` | discovery rules | The endpoint configuration, a JSON object. Set this on every host. |
-| `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` | `1m` | HTTP status and JSONPath checks | Update interval of the raw item **Response {#NAME}**. |
+| `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` | `1m` | HTTP status, JSONPath and HTTP Performance checks | Update interval of **Response {#NAME}** and **HTTP performance {#NAME}**. |
 | `{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}` | `3m` | HTTP status check | How long a missing status code is tolerated before **Unexpected status code for {#NAME}** fires. Must be larger than `HTTP.INTERVAL`, otherwise it provides no tolerance and can raise false no-data problems. |
 | `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}` | `3m` | JSONPath check | How long a missing JSON value is tolerated before **Missing JSON value for {#NAME}** (WARNING) fires. Must be larger than `HTTP.INTERVAL`, otherwise it provides no tolerance and can raise false no-data problems. |
 | `{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}` | `15m` | Certificate check | Update interval of the raw item **Certificate data {#NAME}**. |
@@ -513,6 +566,7 @@ Timing at a glance, with the default values:
 |---|---|---|---|
 | HTTP status | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` = 1m | `{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}` = 3m | never |
 | JSONPath | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` = 1m | `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}` = 3m | never |
+| HTTP Performance | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` = 1m | `performance.nodata` (required per endpoint) | 31d (Zabbix default) |
 | Certificate | `{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}` = 15m | `{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE}` = 30m | `{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}` = 90m |
 
 Two rules follow from this:
@@ -596,6 +650,28 @@ body, then a *JSONPath* step applies `{#JSON_PATH_TEXT}` or `{#JSON_PATH_NUMBER}
 </details>
 
 <details>
+<summary><strong>HTTP Performance</strong>: items and triggers</summary>
+
+The **Performance** rule discovers entries containing `performance` and creates one collecting item and five triggers.
+
+| Item | Key | Type | Value type | Interval | History |
+|---|---|---|---|---|---|
+| HTTP performance {#NAME} | `web.page.perf["{#URL}"]` | Zabbix agent | Float (seconds) | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` | 31d (Zabbix default) |
+
+| Trigger | Severity | Condition |
+|---|---|---|
+| Missing HTTP performance data for {#NAME} | WARNING | No value for `performance.nodata` (`{#PERF_NODATA}`). |
+| Performance of {#NAME} exceeds WARN limit | WARNING | Last load time `> performance.warning` (`{#PERF_WARN}`). |
+| Performance of {#NAME} exceeds AVERAGE limit | AVERAGE | Last load time `> performance.average` (`{#PERF_AVG}`). |
+| Performance of {#NAME} exceeds HIGH limit | HIGH | Last load time `> performance.high` (`{#PERF_HIGH}`). |
+| Performance of {#NAME} exceeds DISASTER limit | DISASTER | Last load time `> performance.disaster` (`{#PERF_DISASTER}`). |
+
+With the example limits of `0.5`, `1`, `2` and `5` seconds, a load time of `0.8` raises WARNING, `1.5` raises WARNING and
+AVERAGE, and `5.2` raises all four threshold problems. Missing performance data raises a separate WARNING after `nodata`.
+
+</details>
+
+<details>
 <summary><strong>Certificate</strong>: items and triggers</summary>
 
 | Item | Key | Type | Value type | Interval | History |
@@ -627,16 +703,16 @@ in problem state.
 
 - **Renaming an entry recreates it.** The top-level key is part of the Zabbix item keys, so a renamed entry produces new
   items and triggers and deletes the old ones (including their history).
-- **Plain requests from the agent.** `web.page.get` and `web.certificate.get` send unauthenticated requests without
-  custom headers or body, so point them at endpoints that answer anonymously. To verify that a protected endpoint is up,
-  use `http_status` with `expectStatus: "401"`. The requests originate on the monitored host: firewalls between the
-  agent and the service matter, firewalls between the Zabbix server and the service do not.
+- **Plain requests from the agent.** `web.page.get`, `web.page.perf` and `web.certificate.get` send unauthenticated
+  requests without custom headers or body, so point them at endpoints that answer anonymously. To verify that a
+  protected endpoint is up, use `http_status` with `expectStatus: "401"`. The requests originate on the monitored host:
+  firewalls between the agent and the service matter, firewalls between the Zabbix server and the service do not.
 - **Certificate checks need `https` and Zabbix agent 2.** For obvious reasons, `web.certificate.get` accepts only the
   `https` scheme. For less obvious reasons it exists only in agent 2. On a host with the classic agent,
   **Certificate data {#NAME}** becomes *Not supported* and an INFO-level problem will be triggered after 30 minutes.
 - **`https` in HTTP checks needs cURL in the classic agent.** The classic Zabbix agent must be built with cURL
-  support to fetch `https` URLs with `web.page.get`, otherwise the item becomes *Not supported*. Zabbix agent 2 has
-  no such requirement.
+  support to fetch `https` URLs with `web.page.get` or `web.page.perf`, otherwise the item becomes *Not supported*.
+  Zabbix agent 2 has no such requirement.
 - **Point certificate checks at the certificate's name.** The certificate is validated for the host name in the
   URL, so `https://shop.example.com` reports `valid` where `https://localhost` reports `invalid` for the same
   certificate. Self-signed certificates yield `valid-but-self-signed`, which also fires **Certificate for {#NAME}
@@ -644,7 +720,7 @@ in problem state.
 - **Removed means gone.** There is no way to pause a check from the configuration: an entry taken out of the macro
   loses its items, triggers and history on the next discovery run. If you want to disable an item, select it on the item
   list of the host and click *Disable* instead of removing it from the macro.
-- **Invalid JSON stops discovery.** If the macro is not valid JSON, both discovery rules turn *Not supported* with
+- **Invalid JSON stops discovery.** If the macro is not valid JSON, all three discovery rules turn *Not supported* with
   the parse error shown in the rule status. Existing items stay as they are until the macro is fixed.
 - **The macro value is limited to 2048 characters.** Keep the JSON compact and the names and URLs short. Depending
   on URL length, somewhere between a dozen and twenty entries fit into one macro. Count the characters as shown in
@@ -661,9 +737,11 @@ in problem state.
   Raise it if a health endpoint needs longer than that.
 - **Test a check by hand.** Run the item key on the monitored host with the agent binary, for example
   `zabbix_agent2 -t 'web.page.get["http://localhost:8080/health"]'` or
+  `zabbix_agent2 -t 'web.page.perf["http://localhost:8080/health"]'` or
   `zabbix_agent2 -t 'web.certificate.get["https://www.example.com"]'` (`zabbix_agentd -t ...` for the classic
   agent), or from the server with `zabbix_get -s <agent address> -k 'web.page.get["http://localhost:8080/health"]'`.
-  The returned value is exactly what **Response {#NAME}** or **Certificate data {#NAME}** will store.
+  The returned value is exactly what **Response {#NAME}**, **HTTP performance {#NAME}** or **Certificate data {#NAME}**
+  will store.
 
 ## 🔧 Development
 
@@ -674,7 +752,7 @@ installation instructions for manual installation are available on its Github re
 stored in the default, project-local rule file `.yamllint.yaml`.
 
 To verify a change functionally, import the file into a test Zabbix (importing again updates the existing
-template), link it to a host with an agent, set a small `{$PUSHIT.WEBCHECK.CONFIG}` and run **Execute now** on both
+template), link it to a host with an agent, set a small `{$PUSHIT.WEBCHECK.CONFIG}` and run **Execute now** on all
 discovery rules. Keep the `uuid` values in the file: they tie every object to its counterpart in an existing
 installation, so re-importing updates instead of duplicating.
 

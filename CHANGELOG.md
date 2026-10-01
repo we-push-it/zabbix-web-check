@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Option to override the comparison operator on JSONPath checks
 - Support for the equality ("=", default) and inequality ("<>") operators
 - Support for numeric comparisons <,>,<= and >=
+- New check type HTTP performance
 
 ### Changed
 - **BC!** Configuration format changed from list of LLD objects to JSON object
