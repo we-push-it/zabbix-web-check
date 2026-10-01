@@ -53,56 +53,56 @@ endpoint list in `{$PUSHIT.WEBCHECK.CONFIG}` into items and triggers:
 flowchart LR
     CFG(["Host macro<br/>{$PUSHIT.WEBCHECK.CONFIG}<br/>JSON object, one named property per endpoint"])
 
-    subgraph LLD ["Discovery rules, every 10m"]
-        DH["HTTP<br/>json_text, json_number or expectStatus top-level-key present"]
-        DC["Certificate<br/>certificate top-level-key present"]
+    subgraph DISCOVERY ["Discovery rules, every 10m"]
+        DRULE_HTTP["HTTP<br/>json_text, json_number or expectStatus top-level-key present"]
+        DRULE_CERT["Certificate<br/>certificate top-level-key present"]
     end
 
-    subgraph HI ["HTTP items, every HTTP.INTERVAL"]
-        RAW["Response {#NAME}<br/>web.page.get"]
-        ST["HTTP status {#NAME}<br/>status line regex"]
-        JP["JSON path (text) {#NAME}<br/>body + JSONPath"]
-        JP_num["JSON path (number) {#NAME}<br/>body + JSONPath"]
+    subgraph HTTP ["HTTP items, every HTTP.INTERVAL"]
+        ITM_HTTP_RAW["Response {#NAME}<br/>web.page.get"]
+        ITM_HTTP_STATUS["HTTP status {#NAME}<br/>status line regex"]
+        ITM_JSON_TXT["JSON path (text) {#NAME}<br/>body + JSONPath"]
+        ITM_JSON_NUM["JSON path (number) {#NAME}<br/>body + JSONPath"]
     end
 
-    subgraph CI ["Certificate items, raw data every CERTIFICATE.INTERVAL"]
-        CRAW["Certificate data {#NAME}<br/>web.certificate.get"]
-        NA["Certificate expiration {#NAME}<br/>notAfter timestamp"]
-        VAL["Certificate validity {#NAME}<br/>verdict"]
-        DAYS["Days until certificate expires ({#NAME})<br/>calculated every 6h"]
+    subgraph CERTIFICATE ["Certificate items, raw data every CERTIFICATE.INTERVAL"]
+        ITM_CERT_RAW["Certificate data {#NAME}<br/>web.certificate.get"]
+        ITM_CERT_NOT_AFTER["Certificate expiration {#NAME}<br/>notAfter timestamp"]
+        ITM_CERT_VALIDITY["Certificate validity {#NAME}<br/>verdict"]
+        ITM_CERT_DAYS_REMAIN["Days until certificate expires ({#NAME})<br/>calculated every 6h"]
     end
 
     subgraph TRG ["Triggers"]
-        T1{{"Unexpected status code<br/>HIGH"}}
-        T2{{"JSON value does not match expected value (text)<br/>HIGH"}}
-        T6{{"JSON value does not match expected value (number)<br/>HIGH"}}
-        T9{{"JSON value matches prohibited value (text)<br/>HIGH"}}
-        T10{{"JSON value matches prohibited value (number)<br/>HIGH"}}
-        T7{{"Missing JSON value<br/>WARNING"}}
-        T8{{"Missing JSON value<br/>WARNING"}}
-        T3{{"Certificate data unavailable<br/>INFO"}}
-        T4{{"Certificate is invalid<br/>HIGH"}}
-        T5{{"Certificate will expire in N or less<br/>N = CERT_WARN / AVG / HIGH_DAYS<br/>WARNING / AVERAGE / HIGH"}}
+        TRG_STATUS_NOT_MATCH{{"Unexpected status code<br/>HIGH"}}
+        TRG_TXT_NOT_MATCH{{"JSON value does not match expected value (text)<br/>HIGH"}}
+        TRG_NUM_NOT_MATCH{{"JSON value does not match expected value (number)<br/>HIGH"}}
+        TRG_TXT_MATCH{{"JSON value matches prohibited value (text)<br/>HIGH"}}
+        TRG_NUM_MATCH{{"JSON value matches prohibited value (number)<br/>HIGH"}}
+        TRG_TXT_ABSENT{{"Missing JSON value<br/>WARNING"}}
+        TRG_NUM_ABSENT{{"Missing JSON value<br/>WARNING"}}
+        TRG_CERT_ABSENT{{"Certificate data unavailable<br/>INFO"}}
+        TRG_CERT_INVALID{{"Certificate is invalid<br/>HIGH"}}
+        TRG_CERT_EXPIRY{{"Certificate will expire in N or less<br/>N = CERT_WARN / AVG / HIGH_DAYS<br/>WARNING / AVERAGE / HIGH"}}
     end
 
-    CFG --> DH & DC
-    DH --> RAW
-    RAW -->|expectStatus present| ST
-    RAW -->|json_text present| JP
-    RAW -->|json_number present| JP_num
-    DC --> CRAW
-    CRAW --> NA & VAL
-    NA --> DAYS
-    ST --> T1
-    JP -->|"operator is = (default)"| T2
-    JP -->|"operator is <>"| T9
-    JP --> T7
-    CRAW --> T3
-    VAL --> T4
-    DAYS --> T5
-    JP_num -->|"operator is = (default)"| T6
-    JP_num -->|"operator is <>"| T10
-    JP_num --> T8
+    CFG --> DRULE_HTTP & DRULE_CERT
+    DRULE_HTTP --> ITM_HTTP_RAW
+    ITM_HTTP_RAW -->|expectStatus present| ITM_HTTP_STATUS
+    ITM_HTTP_RAW -->|json_text present| ITM_JSON_TXT
+    ITM_HTTP_RAW -->|json_number present| ITM_JSON_NUM
+    DRULE_CERT --> ITM_CERT_RAW
+    ITM_CERT_RAW --> ITM_CERT_NOT_AFTER & ITM_CERT_VALIDITY
+    ITM_CERT_NOT_AFTER --> ITM_CERT_DAYS_REMAIN
+    ITM_HTTP_STATUS --> TRG_STATUS_NOT_MATCH
+    ITM_JSON_TXT -->|"operator is = (default)"| TRG_TXT_NOT_MATCH
+    ITM_JSON_TXT -->|"operator is <>"| TRG_TXT_MATCH
+    ITM_JSON_TXT --> TRG_TXT_ABSENT
+    ITM_CERT_RAW --> TRG_CERT_ABSENT
+    ITM_CERT_VALIDITY --> TRG_CERT_INVALID
+    ITM_CERT_DAYS_REMAIN --> TRG_CERT_EXPIRY
+    ITM_JSON_NUM -->|"operator is = (default)"| TRG_NUM_NOT_MATCH
+    ITM_JSON_NUM -->|"operator is <>"| TRG_NUM_MATCH
+    ITM_JSON_NUM --> TRG_NUM_ABSENT
 ```
 
 Step by step:
