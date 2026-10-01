@@ -73,17 +73,17 @@ zabbix_export:
                 - uuid: d48d334e56e34d33a43d2d95d82d4200
                   expression: |
                     last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_WARN_DAYS}
-                  name: 'Certificate for {#NAME} will expire in {#CERT_WARN_DAYS} days or less'
+                  name: 'Certificate for {#NAME} will expire in {#CERT_WARN_DAYS} days or less (WARN)'
                   priority: WARNING
                 - uuid: 1cc9cad76a92426383ab473e3c6df510
                   expression: |
                     last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_AVG_DAYS}
-                  name: 'Certificate for {#NAME} will expire in {#CERT_AVG_DAYS} days or less'
+                  name: 'Certificate for {#NAME} will expire in {#CERT_AVG_DAYS} days or less (AVERAGE)'
                   priority: AVERAGE
                 - uuid: bed26a45d9ae43ecb186433ce69a33d1
                   expression: |
                     last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_HIGH_DAYS}
-                  name: 'Certificate for {#NAME} will expire in {#CERT_HIGH_DAYS} days or less'
+                  name: 'Certificate for {#NAME} will expire in {#CERT_HIGH_DAYS} days or less (HIGH)'
                   priority: HIGH
                   description: |
                     The certificate for {#URL} will expire in {#CERT_HIGH_DAYS} or less. Immediate action required or
@@ -91,6 +91,40 @@ zabbix_export:
           parameters:
             - name: config
               value: '{$PUSHIT.WEBCHECK.CONFIG}'
+          overrides:
+            - name: 'Undiscover WARN trigger'
+              step: '1'
+              filter:
+                conditions:
+                  - macro: '{#CERT_WARN_DAYS}'
+                    value: ^-1$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: 'Certificate for .*? will expire in .*? days or less \(WARN\)'
+                  discover: NO_DISCOVER
+            - name: 'Undiscover AVG trigger'
+              step: '2'
+              filter:
+                conditions:
+                  - macro: '{#CERT_AVG_DAYS}'
+                    value: ^-1$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: 'Certificate for .*? will expire in .*? days or less \(AVERAGE\)'
+                  discover: NO_DISCOVER
+            - name: 'Undiscover HIGH trigger'
+              step: '3'
+              filter:
+                conditions:
+                  - macro: '{#CERT_HIGH_DAYS}'
+                    value: ^-1$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: 'Certificate for .*? will expire in .*? days or less \(HIGH\)'
+                  discover: NO_DISCOVER
         - uuid: 9894a92ce16b4476a698cf55995d56ee
           name: HTTP
           type: SCRIPT

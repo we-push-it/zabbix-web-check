@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for numeric comparisons <,>,<= and >=
 - New check type HTTP performance
 - Option to disable independent levels of check type HTTP performance
+- Option to disable independent levels of check type Certificate
 
 ### Changed
 - **BC!** Configuration format changed from list of LLD objects to JSON object

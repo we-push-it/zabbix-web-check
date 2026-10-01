@@ -337,6 +337,8 @@ valid until it expires. This is a limitation of the `web.certificate.get` item.
 | `high`    | Days before expiry at which a HIGH problem is raised. |
 
 Choose the thresholds so that `warning` > `average` > `high`, for example `30`, `14` and `7`.
+If you do not want to use a specific level, omit it from the configuration or set it to -1. The related trigger will not
+be discovered / deleted by the discovery rule.
 
 ## 📋 Configuration examples
 
@@ -471,9 +473,9 @@ Warn 30 days before the certificate expires, escalate to AVERAGE at 14 days and 
 | Item | Days until certificate expires (www-cert) | – |
 | Trigger | Certificate data for www-cert is unavailable | INFO |
 | Trigger | Certificate for www-cert is invalid | HIGH |
-| Trigger | Certificate for www-cert will expire in 30 days or less | WARNING |
-| Trigger | Certificate for www-cert will expire in 14 days or less | AVERAGE |
-| Trigger | Certificate for www-cert will expire in 7 days or less | HIGH |
+| Trigger | Certificate for www-cert will expire in 30 days or less (WARN) | WARNING |
+| Trigger | Certificate for www-cert will expire in 14 days or less (AVERAGE) | AVERAGE |
+| Trigger | Certificate for www-cert will expire in 7 days or less (HIGH) | HIGH |
 
 The certificate data is fetched every 15 minutes, the days value is recalculated every 6 hours. Use the name the
 certificate was issued for (here `www.example.com`), not `localhost`, otherwise the check reports `invalid`.
@@ -691,9 +693,9 @@ takes `$.result.value` (`valid`, `invalid` or `valid-but-self-signed`), and **Da
 |---|---|---|
 | Certificate data for {#NAME} is unavailable | INFO | No certificate data for `{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE}`. |
 | Certificate for {#NAME} is invalid | HIGH | The validity value is anything other than `valid`. |
-| Certificate for {#NAME} will expire in {#CERT_WARN_DAYS} days or less | WARNING | Days until expiry `<= certificate.warning`. |
-| Certificate for {#NAME} will expire in {#CERT_AVG_DAYS} days or less | AVERAGE | Days until expiry `<= certificate.average`. |
-| Certificate for {#NAME} will expire in {#CERT_HIGH_DAYS} days or less | HIGH | Days until expiry `<= certificate.high`. |
+| Certificate for {#NAME} will expire in {#CERT_WARN_DAYS} days or less (WARN) | WARNING | Days until expiry `<= certificate.warning`. |
+| Certificate for {#NAME} will expire in {#CERT_AVG_DAYS} days or less (AVERAGE) | AVERAGE | Days until expiry `<= certificate.average`. |
+| Certificate for {#NAME} will expire in {#CERT_HIGH_DAYS} days or less (HIGH) | HIGH | Days until expiry `<= certificate.high`. |
 
 The three expiry triggers are independent of each other: once the days drop to the HIGH threshold, all three are
 in problem state.

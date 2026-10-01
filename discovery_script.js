@@ -89,10 +89,9 @@ for (var key in configData) {
     // certificate check
     if (item.hasOwnProperty("certificate")) {
         checkTypes.push("certificate");
-        requireFields(item.certificate, ["warning", "average", "high"], key);
-        outputItem["{#CERT_WARN_DAYS}"] = item.certificate.warning;
-        outputItem["{#CERT_AVG_DAYS}"] = item.certificate.average;
-        outputItem["{#CERT_HIGH_DAYS}"] = item.certificate.high;
+        outputItem["{#CERT_WARN_DAYS}"] = getWithFallback(item.certificate, 'warning', -1);
+        outputItem["{#CERT_AVG_DAYS}"] = getWithFallback(item.certificate, 'average', -1);
+        outputItem["{#CERT_HIGH_DAYS}"] = getWithFallback(item.certificate, 'high', -1);
     }
 
     if (item.hasOwnProperty("performance")) {
