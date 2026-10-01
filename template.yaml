@@ -73,17 +73,17 @@ zabbix_export:
                 - uuid: d48d334e56e34d33a43d2d95d82d4200
                   expression: |
                     last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_WARN_DAYS}
-                  name: 'Certificate for {#NAME} will expire in {#CERT_WARN_DAYS} or less'
+                  name: 'Certificate for {#NAME} will expire in {#CERT_WARN_DAYS} days or less'
                   priority: WARNING
                 - uuid: 1cc9cad76a92426383ab473e3c6df510
                   expression: |
                     last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_AVG_DAYS}
-                  name: 'Certificate for {#NAME} will expire in {#CERT_AVG_DAYS} or less'
+                  name: 'Certificate for {#NAME} will expire in {#CERT_AVG_DAYS} days or less'
                   priority: AVERAGE
                 - uuid: bed26a45d9ae43ecb186433ce69a33d1
                   expression: |
                     last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_HIGH_DAYS}
-                  name: 'Certificate for {#NAME} will expire in {#CERT_HIGH_DAYS} or less'
+                  name: 'Certificate for {#NAME} will expire in {#CERT_HIGH_DAYS} days or less'
                   priority: HIGH
                   description: |
                     The certificate for {#URL} will expire in {#CERT_HIGH_DAYS} or less. Immediate action required or

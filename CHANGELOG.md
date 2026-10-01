@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Data loss:** Triggers got redesigned when support for configurable comparison operators were added. This will lead
 to the history of triggers being lost.
 
+### Fixed
+- Bad wording of trigger names "Certificate for NAME will expire in NUMBER or less", added unit so it reads "NUMBER days".
+
 ## [v0.2.0] - 2026-09-29
 ### Changed
 - Disable history of raw HTTP responses (dependent items are unaffected by this change)
