@@ -162,9 +162,10 @@ macro follows the same path: edit the value, then wait for the next discovery ru
 whose keys are LLD macros. Three keys are common to all checks; the value of `{#TYPES}` decides which additional keys
 are needed.
 
-> **Write every value as a JSON string**: `"200"` rather than `200`, `"true"` rather than `true`. Strings are always
-> safe for low-level discovery, and this matches how the values are compared: status codes and day thresholds
-> numerically, JSON values as text.
+> **Write values as JSON strings** like the examples do: `"200"`, `"30"`, `"UP"`. Status codes, day thresholds and
+> expected values may also be plain JSON numbers, expected values also `true` or `false`. Both discovery rules check
+> every entry before they create anything and stop with an error that names the entry when they find a mistake.
+> [Tips and gotchas](#-tips-and-gotchas) lists what they check and what only Zabbix notices later.
 
 ### Common keys
 
@@ -172,7 +173,7 @@ are needed.
 |---|---|
 | `{#NAME}` | Unique name of the check on this host. It is used unquoted inside item keys such as `pushit.webcheck.http.status[{#NAME}]` and appears in item and trigger names, so use only letters, digits, `_`, `-` and `.`; no spaces, commas, brackets or quotes. |
 | `{#URL}` | The endpoint as `scheme://host[:port][/path]`. The default port of the scheme and the root path apply when omitted. |
-| `{#TYPES}` | A comma-separated list of checks to run. Allowed items: `http_status`, `json_path` or `certificate`. Any other item in the list will be ignored. |
+| `{#TYPES}` | The checks to run, as a comma-separated list such as `"http_status,json_path"` or as a JSON array such as `["http_status","json_path"]`. Allowed items: `http_status`, `json_path` and `certificate`; case and spaces around the items do not matter. Any other item stops the discovery with an error. |
 
 ### `http_status`
 
@@ -472,8 +473,10 @@ collide and are easy to tell apart in *Latest data* and *Problems*.
 | **HTTP** | `pushit.webcheck.discovery.http` | Script | every 10m | `{#TYPES}` containing `http_status` or `json_path` | Delete immediately |
 | **Certificate** | `pushit.webcheck.discovery.certificate` | Script | every 10m | `{#TYPES}` containing `certificate` | Delete immediately |
 
-Both rules receive `{$PUSHIT.WEBCHECK.CONFIG}` as the script parameter `config` and return the value of
-`JSON.parse(value).config`.
+Both rules receive `{$PUSHIT.WEBCHECK.CONFIG}` as the script parameter `config` and run the same script. It parses
+the value, checks every entry against the rules in [Endpoint configuration](#-endpoint-configuration), writes
+`{#TYPES}` back as a plain list such as `http_status,json_path` for the filters and returns the entries. On the first
+problem it throws an error instead: both rules become *Not supported* and the discovered items stay as they are.
 
 The **HTTP** rule creates its two dependent prototypes with *Discover* set to *No* and switches on the matching one
 with an override, so each HTTP entry ends up with the raw item plus exactly one dependent item:
@@ -570,9 +573,17 @@ in problem state.
   list of the host and click *Disable* instead of removing it from the macro.
 - **Invalid JSON stops discovery.** If the macro is not valid JSON, both discovery rules turn *Not supported* with
   the parse error shown in the rule status. Existing items stay as they are until the macro is fixed.
-- **Unknown values in `{#TYPES}` are ignored.** A typo such as `http-status` matches neither rule and produces no items,
-  no triggers and no error. Check the *Items* and *Latest data* views after adding an entry and executing the discovery
-  rule.
+- **Invalid entries stop discovery as well.** Both rules check every entry before they create anything: unknown keys
+  such as the old `{#TYPE}`, unknown check types such as `http-status`, missing values, status codes outside 100 to
+  599, day thresholds that are not plain numbers such as `"30d"`, expected values with leading or trailing spaces,
+  JSON paths with a syntax error or with `"` or `\`, and a `{#NAME}` used twice within the HTTP or within the
+  certificate entries. Each of these turns both rules *Not supported* with an error that names the entry. For example,
+  `Entry 1 (app): {#EXPECT_STATUS} must be a status code from 100 to 599 for http_status, got "200 "`. Existing items
+  stay as they are until the macro is fixed. An action on internal events for low-level discovery rules in
+  *Not supported* state can alert on this.
+- **Errors in JSONPath filters do not stop discovery.** The rules check a JSON path only up to its first filter
+  expression such as `[?(@.status == 'UP')]`. Zabbix checks the rest when it creates the item and reports an error only
+  in the *Info* column of the **HTTP** rule, which stays normal. The entry is left without a working JSON path check.
 - **The macro value is limited to 2048 characters.** Keep the JSON compact and the names and URLs short. Depending
   on URL length, somewhere between a dozen and twenty entries fit into one macro. Count the characters as shown in
   [compact form](#compact-form).
