@@ -14,7 +14,133 @@ zabbix_export:
           type: SCRIPT
           key: pushit.webcheck.discovery.certificate
           delay: 10m
-          params: 'return JSON.parse(value).config'
+          params: |
+            var keys = ['{#NAME}', '{#URL}', '{#TYPES}', '{#EXPECT_STATUS}', '{#JSON_PATH}', '{#EXPECT_VALUE}',
+                    '{#CERT_WARN_DAYS}', '{#CERT_AVG_DAYS}', '{#CERT_HIGH_DAYS}'],
+                checks = ['http_status', 'json_path', 'certificate'],
+                names = {},
+                entries, entry, label;
+
+            function fail(key, what) {
+                var value = entry[key];
+
+                throw label + ': ' + key + ' must be ' + what
+                    + (value === undefined ? ', but it is missing' : ', got ' + JSON.stringify(value));
+            }
+
+            function check(key, test, what) {
+                if (!test(entry[key])) {
+                    fail(key, what);
+                }
+            }
+
+            function isText(value) {
+                return typeof value === 'string' && /\S/.test(value);
+            }
+
+            function isStatus(value) {
+                return (typeof value === 'string' || typeof value === 'number') && /^[1-5][0-9][0-9]$/.test(String(value));
+            }
+
+            function isJsonPath(value) {
+                var quoted = /\.{0,2}\[\s*'[^']+'(?:\s*(?:,\s*)?'[^']+')*\s*\]/g,
+                    indexes = /\.{0,2}\[\s*(?:\*\s*|-?\d+(?:(?:\s*,\s*|\s+)-?\d+)*\s*|(?:-?\d[-\d\s]*)?:[-\d\s]*)\]/g,
+                    path = /^\$(?:\.\.?(?:\*|[\w$]+))*(?:(?:\.\.?(?:min|max|avg|length|first|sum)\(\s*\)|~)*$|\.{0,2}\[\s*\?)/;
+
+                return typeof value === 'string' && /^\$[^"\\]+$/.test(value) && !/\s$/.test(value)
+                    && path.test(value.replace(quoted, '.*').replace(indexes, '.*'));
+            }
+
+            function isScalar(value) {
+                return (typeof value === 'string' && !/^\s|\s$/.test(value)) || typeof value === 'boolean'
+                    || (typeof value === 'number' && isFinite(value));
+            }
+
+            function isDays(value) {
+                return (typeof value === 'string' || typeof value === 'number') && /^-?[0-9]+(\.[0-9]+)?$/.test(String(value));
+            }
+
+            try {
+                entries = JSON.parse(JSON.parse(value).config);
+            }
+            catch (error) {
+                throw 'PUSHIT.WEBCHECK.CONFIG is not valid JSON: ' + error.message;
+            }
+            if (entries && Array.isArray(entries.data)) {
+                entries = entries.data;
+            }
+            if (!Array.isArray(entries)) {
+                throw 'PUSHIT.WEBCHECK.CONFIG must be a JSON array with one object per endpoint';
+            }
+
+            for (var i = 0; i < entries.length; i++) {
+                var types = [], list, j;
+
+                entry = entries[i];
+                label = 'Entry ' + (i + 1);
+
+                if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+                    throw label + ' must be a JSON object, got ' + JSON.stringify(entry);
+                }
+                if (isText(entry['{#NAME}'])) {
+                    label += ' (' + entry['{#NAME}'] + ')';
+                }
+                for (var key in entry) {
+                    if (keys.indexOf(key) === -1) {
+                        throw label + ': unknown key ' + JSON.stringify(key) + ', allowed keys are ' + keys.join(', ');
+                    }
+                }
+                check('{#NAME}', isText, 'a non-empty string');
+                check('{#URL}', isText, 'a non-empty string');
+
+                list = entry['{#TYPES}'];
+                if (Array.isArray(list)) {
+                    list = list.join(',');
+                }
+                list = typeof list === 'string' ? list.split(',') : [];
+                for (j = 0; j < list.length; j++) {
+                    var type = list[j].trim().toLowerCase();
+
+                    if (type !== '' && checks.indexOf(type) === -1) {
+                        throw label + ': unknown check ' + JSON.stringify(list[j].trim()) + ' in {#TYPES}, allowed are '
+                            + checks.join(', ');
+                    }
+                    if (type !== '' && types.indexOf(type) === -1) {
+                        types.push(type);
+                    }
+                }
+                if (types.length === 0) {
+                    fail('{#TYPES}', 'a comma-separated list of ' + checks.join(', '));
+                }
+                entry['{#TYPES}'] = types.join(',');
+
+                if (types.indexOf('http_status') !== -1) {
+                    check('{#EXPECT_STATUS}', isStatus, 'a status code from 100 to 599 for http_status');
+                }
+                if (types.indexOf('json_path') !== -1) {
+                    check('{#JSON_PATH}', isJsonPath, 'a JSONPath such as $.status or $.components[\'db-main\'].status'
+                        + ' for json_path, without " or \\ and without spaces outside brackets');
+                    check('{#EXPECT_VALUE}', isScalar, 'a string without leading or trailing spaces, a number or a boolean for json_path');
+                }
+                if (types.indexOf('certificate') !== -1) {
+                    check('{#CERT_WARN_DAYS}', isDays, 'a number of days such as "30" for certificate');
+                    check('{#CERT_AVG_DAYS}', isDays, 'a number of days such as "14" for certificate');
+                    check('{#CERT_HIGH_DAYS}', isDays, 'a number of days such as "7" for certificate');
+                }
+
+                for (j = 0; j < types.length; j++) {
+                    var rule = types[j] === 'certificate' ? 'certificate' : 'HTTP',
+                        id = rule + ' ' + entry['{#NAME}'];
+
+                    if (id in names && names[id] !== i) {
+                        throw label + ': {#NAME} is already used by entry ' + (names[id] + 1) + ', ' + rule
+                            + ' entries need unique names';
+                    }
+                    names[id] = i;
+                }
+            }
+
+            return JSON.stringify(entries);
           filter:
             conditions:
               - macro: '{#TYPES}'
@@ -95,7 +221,133 @@ zabbix_export:
           type: SCRIPT
           key: pushit.webcheck.discovery.http
           delay: 10m
-          params: 'return JSON.parse(value).config;'
+          params: |
+            var keys = ['{#NAME}', '{#URL}', '{#TYPES}', '{#EXPECT_STATUS}', '{#JSON_PATH}', '{#EXPECT_VALUE}',
+                    '{#CERT_WARN_DAYS}', '{#CERT_AVG_DAYS}', '{#CERT_HIGH_DAYS}'],
+                checks = ['http_status', 'json_path', 'certificate'],
+                names = {},
+                entries, entry, label;
+
+            function fail(key, what) {
+                var value = entry[key];
+
+                throw label + ': ' + key + ' must be ' + what
+                    + (value === undefined ? ', but it is missing' : ', got ' + JSON.stringify(value));
+            }
+
+            function check(key, test, what) {
+                if (!test(entry[key])) {
+                    fail(key, what);
+                }
+            }
+
+            function isText(value) {
+                return typeof value === 'string' && /\S/.test(value);
+            }
+
+            function isStatus(value) {
+                return (typeof value === 'string' || typeof value === 'number') && /^[1-5][0-9][0-9]$/.test(String(value));
+            }
+
+            function isJsonPath(value) {
+                var quoted = /\.{0,2}\[\s*'[^']+'(?:\s*(?:,\s*)?'[^']+')*\s*\]/g,
+                    indexes = /\.{0,2}\[\s*(?:\*\s*|-?\d+(?:(?:\s*,\s*|\s+)-?\d+)*\s*|(?:-?\d[-\d\s]*)?:[-\d\s]*)\]/g,
+                    path = /^\$(?:\.\.?(?:\*|[\w$]+))*(?:(?:\.\.?(?:min|max|avg|length|first|sum)\(\s*\)|~)*$|\.{0,2}\[\s*\?)/;
+
+                return typeof value === 'string' && /^\$[^"\\]+$/.test(value) && !/\s$/.test(value)
+                    && path.test(value.replace(quoted, '.*').replace(indexes, '.*'));
+            }
+
+            function isScalar(value) {
+                return (typeof value === 'string' && !/^\s|\s$/.test(value)) || typeof value === 'boolean'
+                    || (typeof value === 'number' && isFinite(value));
+            }
+
+            function isDays(value) {
+                return (typeof value === 'string' || typeof value === 'number') && /^-?[0-9]+(\.[0-9]+)?$/.test(String(value));
+            }
+
+            try {
+                entries = JSON.parse(JSON.parse(value).config);
+            }
+            catch (error) {
+                throw 'PUSHIT.WEBCHECK.CONFIG is not valid JSON: ' + error.message;
+            }
+            if (entries && Array.isArray(entries.data)) {
+                entries = entries.data;
+            }
+            if (!Array.isArray(entries)) {
+                throw 'PUSHIT.WEBCHECK.CONFIG must be a JSON array with one object per endpoint';
+            }
+
+            for (var i = 0; i < entries.length; i++) {
+                var types = [], list, j;
+
+                entry = entries[i];
+                label = 'Entry ' + (i + 1);
+
+                if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+                    throw label + ' must be a JSON object, got ' + JSON.stringify(entry);
+                }
+                if (isText(entry['{#NAME}'])) {
+                    label += ' (' + entry['{#NAME}'] + ')';
+                }
+                for (var key in entry) {
+                    if (keys.indexOf(key) === -1) {
+                        throw label + ': unknown key ' + JSON.stringify(key) + ', allowed keys are ' + keys.join(', ');
+                    }
+                }
+                check('{#NAME}', isText, 'a non-empty string');
+                check('{#URL}', isText, 'a non-empty string');
+
+                list = entry['{#TYPES}'];
+                if (Array.isArray(list)) {
+                    list = list.join(',');
+                }
+                list = typeof list === 'string' ? list.split(',') : [];
+                for (j = 0; j < list.length; j++) {
+                    var type = list[j].trim().toLowerCase();
+
+                    if (type !== '' && checks.indexOf(type) === -1) {
+                        throw label + ': unknown check ' + JSON.stringify(list[j].trim()) + ' in {#TYPES}, allowed are '
+                            + checks.join(', ');
+                    }
+                    if (type !== '' && types.indexOf(type) === -1) {
+                        types.push(type);
+                    }
+                }
+                if (types.length === 0) {
+                    fail('{#TYPES}', 'a comma-separated list of ' + checks.join(', '));
+                }
+                entry['{#TYPES}'] = types.join(',');
+
+                if (types.indexOf('http_status') !== -1) {
+                    check('{#EXPECT_STATUS}', isStatus, 'a status code from 100 to 599 for http_status');
+                }
+                if (types.indexOf('json_path') !== -1) {
+                    check('{#JSON_PATH}', isJsonPath, 'a JSONPath such as $.status or $.components[\'db-main\'].status'
+                        + ' for json_path, without " or \\ and without spaces outside brackets');
+                    check('{#EXPECT_VALUE}', isScalar, 'a string without leading or trailing spaces, a number or a boolean for json_path');
+                }
+                if (types.indexOf('certificate') !== -1) {
+                    check('{#CERT_WARN_DAYS}', isDays, 'a number of days such as "30" for certificate');
+                    check('{#CERT_AVG_DAYS}', isDays, 'a number of days such as "14" for certificate');
+                    check('{#CERT_HIGH_DAYS}', isDays, 'a number of days such as "7" for certificate');
+                }
+
+                for (j = 0; j < types.length; j++) {
+                    var rule = types[j] === 'certificate' ? 'certificate' : 'HTTP',
+                        id = rule + ' ' + entry['{#NAME}'];
+
+                    if (id in names && names[id] !== i) {
+                        throw label + ': {#NAME} is already used by entry ' + (names[id] + 1) + ', ' + rule
+                            + ' entries need unique names';
+                    }
+                    names[id] = i;
+                }
+            }
+
+            return JSON.stringify(entries);
           filter:
             evaltype: OR
             conditions:
