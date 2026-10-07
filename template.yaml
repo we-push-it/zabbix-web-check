@@ -118,23 +118,56 @@ zabbix_export:
               key: 'pushit.webcheck.http.status[{#NAME}]'
               discover: NO_DISCOVER
               preprocessing:
+                - type: CHECK_NOT_SUPPORTED
+                  parameters:
+                    - '-1'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
                 - type: REGEX
                   parameters:
                     - '\AHTTP/[0-9.]+[ \t]+([0-9]{3})(?:[ \t]|\r?\n)'
                     - \1
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
               master_item:
                 key: 'web.page.get["{#URL}"]'
               trigger_prototypes:
                 - uuid: ba3ea028aa854c2fbc62061acb70259a
                   expression: |
-                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}],{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE})=1
-                    or
                     last(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}])<>{#EXPECT_STATUS}
+                    and
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}])<>0
+                  recovery_mode: RECOVERY_EXPRESSION
+                  recovery_expression: |
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}])={#EXPECT_STATUS}
+                    or
+                    count(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}],{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE},"ne","0")=0
                   name: 'Unexpected status code for {#NAME}'
                   priority: HIGH
-                  description: |
-                    The status code of the monitored service does not match the expected status {#EXPECT_STATUS} code or
-                    no status code is available for more than {$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}.
+                  description: >-
+                    The status code of the monitored service does not match the expected status code {#EXPECT_STATUS}.
+                    The problem stays open until the service answers with {#EXPECT_STATUS} again. If no status code
+                    arrives for {$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}, No status code for {#NAME} takes over.
+                - uuid: 74b6bc13eb3a435da550919fdf3cdc72
+                  expression: |
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}])=0
+                    and
+                    count(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}],{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE},"ne","0")=0
+                  name: 'No status code for {#NAME}'
+                  priority: HIGH
+                  description: >-
+                    The monitored service has not answered with a status code within the last
+                    {$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}: it refused the connection, did not answer within the
+                    item timeout or sent no valid status line. HTTP status {#NAME} is 0 in that case.
+                - uuid: 0f8fa44a14fc484b8dc9b167ed2c8111
+                  expression: |
+                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}],{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE})=1
+                  name: 'No data for HTTP status {#NAME}'
+                  priority: WARNING
+                  description: >-
+                    No value at all, not even 0, has arrived for HTTP status {#NAME} for more than
+                    {$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}. The check is not running, usually because the Zabbix
+                    agent is not reachable. This says nothing about the monitored service.
             - uuid: 4517fccf57e3473a80e786ada27dac6b
               name: 'JSON path {#NAME}'
               type: DEPENDENT
@@ -142,27 +175,64 @@ zabbix_export:
               value_type: TEXT
               discover: NO_DISCOVER
               preprocessing:
+                - type: CHECK_NOT_SUPPORTED
+                  parameters:
+                    - '-1'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '[no value]'
                 - type: REGEX
                   parameters:
                     - '\r?\n\r?\n([\s\S]*)'
                     - \1
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '[no value]'
                 - type: JSONPATH
                   parameters:
                     - '{#JSON_PATH}'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '[no value]'
               master_item:
                 key: 'web.page.get["{#URL}"]'
               trigger_prototypes:
                 - uuid: 9a42683503184a378dc57cc56f3b0d6b
                   expression: |
-                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}],{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE})=1
-                    or
                     last(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}])<>"{#EXPECT_VALUE}"
+                    and
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}])<>"[no value]"
+                  recovery_mode: RECOVERY_EXPRESSION
+                  recovery_expression: >-
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}])="{#EXPECT_VALUE}"
+                    or
+                    count(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}],
+                    {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","[no value]")=0
                   name: 'Unexpected JSON value for {#NAME}'
                   priority: HIGH
-                  description: |
+                  description: >-
                     The value at "{#JSON_PATH}" in the response of the monitored service does not match the expected
-                    value of "{#EXPECT_VALUE}" or no response is available for more than
-                    {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}.
+                    value of "{#EXPECT_VALUE}". The problem stays open until the service answers with that value again.
+                    If no value can be read for {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}, No JSON value for
+                    {#NAME} takes over.
+                - uuid: e704b580f33040b8bb0183abf564358f
+                  expression: >-
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}])="[no value]"
+                    and
+                    count(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}],
+                    {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","[no value]")=0
+                  name: 'No JSON value for {#NAME}'
+                  priority: HIGH
+                  description: >-
+                    No value could be read at "{#JSON_PATH}" in the responses of the monitored service within the last
+                    {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}: the service did not answer, the body is not JSON or
+                    the path does not exist. JSON path {#NAME} is [no value] in that case.
+                - uuid: 656b1595bc2845e4b09aef1897a25b80
+                  expression: |
+                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}],{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE})=1
+                  name: 'No data for JSON path {#NAME}'
+                  priority: WARNING
+                  description: >-
+                    No value at all, not even [no value], has arrived for JSON path {#NAME} for more than
+                    {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}. The check is not running, usually because the Zabbix
+                    agent is not reachable. This says nothing about the monitored service.
           parameters:
             - name: config
               value: '{$PUSHIT.WEBCHECK.CONFIG}'

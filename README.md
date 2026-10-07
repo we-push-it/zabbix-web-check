@@ -41,8 +41,8 @@ to check as a public one.
 - 🧹 **Self-cleaning.** Remove an entry from the macro and its items and triggers disappear on the next discovery
   run.
 - 📅 **Three-stage certificate alerts.** WARNING, AVERAGE and HIGH thresholds in days, chosen per endpoint.
-- ⏳ **Grace periods.** A missing response becomes a problem only after a configurable grace period; a wrong value
-  is reported immediately.
+- ⏳ **Grace periods.** An endpoint that stops giving usable answers becomes a problem only after a configurable grace
+  period; a wrong value is reported immediately. An unreachable agent is reported as WARNING, not as a failed check.
 - 🎚️ **Tunable with macros.** Intervals and grace periods are user macros you can override per host.
 
 ## 🧭 How it works
@@ -73,8 +73,8 @@ flowchart LR
     end
 
     subgraph TRG ["Triggers"]
-        T1{{"Unexpected status code<br/>HIGH"}}
-        T2{{"Unexpected JSON value<br/>HIGH"}}
+        T1{{"Unexpected status code / No status code<br/>HIGH<br/>No data for HTTP status<br/>WARNING"}}
+        T2{{"Unexpected JSON value / No JSON value<br/>HIGH<br/>No data for JSON path<br/>WARNING"}}
         T3{{"Certificate data unavailable<br/>INFO"}}
         T4{{"Certificate is invalid<br/>HIGH"}}
         T5{{"Certificate will expire in N or less<br/>N = CERT_WARN / AVG / HIGH_DAYS<br/>WARNING / AVERAGE / HIGH"}}
@@ -107,7 +107,7 @@ Step by step:
    JSONPath). Two overrides in the HTTP rule make sure that only the dependent item matching the entry's type is
    created. The certificate rule adds a calculated item that turns the `notAfter` timestamp into days.
 5. **Triggers.** Trigger prototypes compare the values with your expectations (`{#EXPECT_STATUS}`,
-   `{#EXPECT_VALUE}`, `{#CERT_*_DAYS}`) and also raise a problem when no value has arrived for longer than the
+   `{#EXPECT_VALUE}`, `{#CERT_*_DAYS}`) and also raise a problem when no usable value has arrived within the
    grace period.
 6. **Cleanup.** Lost resources are deleted immediately: remove an entry from the macro and its items, triggers and
    history are gone after the next discovery run.
@@ -151,7 +151,7 @@ From download to the first problem in Zabbix in six steps.
 6. **Check the result.** *Monitoring → Latest data*, filtered by your host, shows **Response app** (the raw HTTP
    response) and **HTTP status app** with the value `200`. If the endpoint answers with a different status code, or
    does not answer at all for more than 3 minutes, *Monitoring → Problems* shows **Unexpected status code for app**
-   with severity HIGH.
+   or **No status code for app** respectively, both with severity HIGH.
 
 From here, extend the list with the [configuration examples](#-configuration-examples). Every later change to the
 macro follows the same path: edit the value, then wait for the next discovery run or use **Execute now**.
@@ -242,9 +242,13 @@ A single service on port 8080 whose health endpoint must answer `200`.
 | Item | Response app | – |
 | Item | HTTP status app | – |
 | Trigger | Unexpected status code for app | HIGH |
+| Trigger | No status code for app | HIGH |
+| Trigger | No data for HTTP status app | WARNING |
 
-The raw response is fetched every minute. The trigger fires when the code is not `200`, or when no code has arrived
-for 3 minutes, for example because the endpoint refuses connections.
+The raw response is fetched every minute. **Unexpected status code for app** fires as soon as a code other than `200`
+arrives. **No status code for app** fires when no code could be read for 3 minutes, for example because the endpoint
+refuses connections. **No data for HTTP status app** fires when nothing arrives at all for 3 minutes, usually because
+the agent is not reachable.
 
 Any status code works as expectation. An endpoint behind authentication, for example, should answer `401`:
 
@@ -299,9 +303,13 @@ endpoints must answer without authentication.
 | Item | Response shop-api | – |
 | Item | JSON path shop-api | – |
 | Trigger | Unexpected JSON value for shop-api | HIGH |
+| Trigger | No JSON value for shop-api | HIGH |
+| Trigger | No data for JSON path shop-api | WARNING |
 
-The trigger fires when the selected value differs from `UP`, and also when no value has arrived for 3 minutes, for
-example because the service is down, the body is not JSON or the path does not match.
+**Unexpected JSON value for shop-api** fires as soon as the selected value differs from `UP`. **No JSON value for
+shop-api** fires when no value could be read for 3 minutes, for example because the service is down, the body is not
+JSON or the path does not match. **No data for JSON path shop-api** fires when nothing arrives at all for 3 minutes,
+usually because the agent is not reachable.
 
 ### 3. Certificate expiry with three thresholds
 
@@ -436,8 +444,8 @@ All macros are defined on the template and can be overridden per host. Time valu
 |---|---|---|---|
 | `{$PUSHIT.WEBCHECK.CONFIG}` | `[]` | discovery rules | The endpoint list, a JSON array in LLD format. Set this on every host. |
 | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` | `1m` | `http_status`, `json_path` | Update interval of the raw item **Response {#NAME}**. |
-| `{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}` | `3m` | `http_status` | How long a missing status code is tolerated before **Unexpected status code for {#NAME}** fires. Must be larger than `HTTP.INTERVAL`, otherwise it provides no tolerance and can raise false no-data problems. |
-| `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}` | `3m` | `json_path` | How long a missing response is tolerated before **Unexpected JSON value for {#NAME}** fires. Must be larger than `HTTP.INTERVAL`, otherwise it provides no tolerance and can raise false no-data problems. |
+| `{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}` | `3m` | `http_status` | How long a missing status code is tolerated before **No status code for {#NAME}** (HIGH) fires, and how long missing data is tolerated before **No data for HTTP status {#NAME}** (WARNING) fires. Must be larger than `HTTP.INTERVAL`, otherwise it provides no tolerance and can raise false no-data problems. |
+| `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}` | `3m` | `json_path` | How long a missing JSON value is tolerated before **No JSON value for {#NAME}** (HIGH) fires, and how long missing data is tolerated before **No data for JSON path {#NAME}** (WARNING) fires. Must be larger than `HTTP.INTERVAL`, otherwise it provides no tolerance and can raise false no-data problems. |
 | `{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}` | `15m` | `certificate` | Update interval of the raw item **Certificate data {#NAME}**. |
 | `{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE}` | `30m` | `certificate` | How long missing certificate data is tolerated before **Certificate data for {#NAME} is unavailable** (INFO) fires. Must be larger than `CERTIFICATE.INTERVAL` and smaller than `CERTIFICATE.HISTORY`. |
 | `{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}` | `90m` | `certificate` | History retention of the raw certificate JSON only. Must be larger than `CERTIFICATE.NO_DATA_GRACE`, should be larger than `CERTIFICATE.INTERVAL` and must be at least `1h`. The derived items are not affected. |
@@ -446,7 +454,7 @@ All macros are defined on the template and can be overridden per host. Time valu
 
 Timing at a glance, with the default values:
 
-| Check type | Raw item collected every | No-data grace before the trigger fires | Raw history kept for |
+| Check type | Raw item collected every | Grace period | Raw history kept for |
 |---|---|---|---|
 | `http_status` | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` = 1m | `{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}` = 3m | never |
 | `json_path` | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` = 1m | `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}` = 3m | never |
@@ -454,13 +462,29 @@ Timing at a glance, with the default values:
 
 Two rules follow from this:
 
-- **Grace periods must be larger than the interval.** The grace period is the argument of `nodata()`. If it is
-  equal to or shorter than the interval, the window runs out between two regular polls and the trigger can raise
-  problems on a healthy endpoint. The defaults (1m interval, 3m grace) tolerate two missed polls.
+- **Grace periods must be larger than the interval.** The grace period is the time window of `nodata()` and of
+  `count()` in the triggers. If it is equal to or shorter than the interval, the window runs out between two regular
+  polls: the no-data triggers can raise problems on a healthy endpoint, and a single failed request is enough for
+  **No status code** or **No JSON value**. The defaults (1m interval, 3m grace) tolerate two missed polls.
 - **`CERTIFICATE.INTERVAL < CERTIFICATE.NO_DATA_GRACE < CERTIFICATE.HISTORY`.** The certificate `nodata()` trigger
   watches the raw item **Certificate data {#NAME}**, whose history is set by `CERTIFICATE.HISTORY`, so the history
-  has to outlast the grace period. When you raise one, raise the other with it. The HTTP `nodata()` triggers watch
-  the dependent items, which keep the Zabbix default history of 31d, so no such rule applies to them.
+  has to outlast the grace period. When you raise one, raise the other with it. The HTTP triggers watch the
+  dependent items, which keep the Zabbix default history of 31d, so no such rule applies to them.
+
+An agent that cannot be reached sends neither responses nor errors. The HTTP checks of the host then raise only their
+WARNING **No data for ...** triggers, one per check, after the grace period. **Unexpected status code**, **Unexpected
+JSON value**, **No status code** and **No JSON value** keep their state until data arrives again. If no successful
+request lies within the grace period, as for a new entry or after an agent outage longer than the grace period, the
+first failed request raises **No status code** or **No JSON value** right away.
+
+To get only the agent problem in that case, make the trigger prototypes **No data for HTTP status {#NAME}** and
+**No data for JSON path {#NAME}** depend on the agent availability trigger of the host's OS template, for example
+**Linux: Zabbix agent is not available**: in the row of the host under *Data collection → Hosts*, click *Discovery*,
+then *Trigger prototypes* of the **HTTP** rule, and add the trigger on the *Dependencies* tab of both prototypes.
+Discovery passes the dependency on to the triggers of every HTTP check, and updates of this template keep it. A
+dependency only holds back problems that start after the agent problem. With the default `{$AGENT.TIMEOUT}` of `3m`
+the agent problem usually comes after the `3m` grace period, so also lower `{$AGENT.TIMEOUT}` on the host, for
+example to `1m`.
 
 ## 📦 Items and triggers
 
@@ -497,7 +521,18 @@ three-digit status code from the status line with one *Regular expression* prepr
 
 | Trigger | Severity | Condition |
 |---|---|---|
-| Unexpected status code for {#NAME} | HIGH | No status code for `{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}`, or the last code differs from `{#EXPECT_STATUS}`. |
+| Unexpected status code for {#NAME} | HIGH | The last code is neither `0` nor `{#EXPECT_STATUS}`. The problem stays open until `{#EXPECT_STATUS}` arrives again or **No status code for {#NAME}** fires and takes over. |
+| No status code for {#NAME} | HIGH | The last code is `0` and no other code has arrived within the last `{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}`. |
+| No data for HTTP status {#NAME} | WARNING | No value at all, not even `0`, for `{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}`, usually because the agent is not reachable. |
+
+`0` stands for "no status code". When the agent cannot fetch the URL, because the connection is refused, the request
+times out or the answer is not HTTP, it reports an error and **Response {#NAME}** becomes *Not supported*. A *Check
+for not supported value* step in front of the regular expression turns that error into `0`, and *Custom on fail* on
+the regular expression does the same for a response without a valid status line. **HTTP status {#NAME}** therefore
+stays supported and gets a value on every poll that reaches the agent, but it does not keep the reason for a `0`. A
+failed request shows its error on **Response {#NAME}**. For a response without a valid status line, run the key by
+hand as in the tip **Test a check by hand** and paste the output into *Test* on **HTTP status {#NAME}**, which shows
+the result of every preprocessing step.
 
 </details>
 
@@ -515,7 +550,15 @@ body, then a *JSONPath* step applies `{#JSON_PATH}`.
 
 | Trigger | Severity | Condition |
 |---|---|---|
-| Unexpected JSON value for {#NAME} | HIGH | No value for `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}`, or the last value differs from `{#EXPECT_VALUE}`. |
+| Unexpected JSON value for {#NAME} | HIGH | The last value is neither `[no value]` nor `{#EXPECT_VALUE}`. The problem stays open until `{#EXPECT_VALUE}` arrives again or **No JSON value for {#NAME}** fires and takes over. |
+| No JSON value for {#NAME} | HIGH | The last value is `[no value]` and no other value has arrived within the last `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}`. |
+| No data for JSON path {#NAME} | WARNING | No value at all, not even `[no value]`, for `{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}`, usually because the agent is not reachable. |
+
+`[no value]` stands for "no value at the path". A *Check for not supported value* step in front of the regular
+expression and *Custom on fail* on the *Regular expression* and *JSONPath* steps store it instead of an error when the
+agent cannot fetch the URL, the response has no body, the body is not JSON or `{#JSON_PATH}` matches nothing. As for
+`http_status`, the reason is not kept: a failed request shows its error on **Response {#NAME}**, and for the other
+cases *Test* on **JSON path {#NAME}** with the output of the tip **Test a check by hand** shows which step fails.
 
 </details>
 
