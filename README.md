@@ -491,9 +491,15 @@ with an override, so each HTTP entry ends up with the raw item plus exactly one 
 | Response {#NAME} | `web.page.get["{#URL}"]` | Zabbix agent | Text | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` | none |
 | HTTP status {#NAME} | `pushit.webcheck.http.status[{#NAME}]` | Dependent on Response {#NAME} | Numeric (unsigned) | with the master item | 31d (Zabbix default) |
 
-**Response {#NAME}** holds the raw response: status line, headers and body. **HTTP status {#NAME}** extracts the
-three-digit status code from the status line with one *Regular expression* preprocessing step, pattern
-`\AHTTP/[0-9.]+[ \t]+([0-9]{3})(?:[ \t]|\r?\n)` and output `\1`.
+**Response {#NAME}** fetches the raw response (status line, headers and body) but does not store it. Unlike agent 2, the
+classic Zabbix agent can put further header blocks in front of it: those of interim responses such as `103 Early Hints`,
+and the reply of a proxy to `CONNECT` when `https_proxy` is set in the agent's environment. **HTTP status {#NAME}**
+skips every header block that is directly followed by another status line and extracts the three-digit status code of
+the final response with one *Regular expression* preprocessing step, output `\1` and this pattern:
+
+```text
+\A(?:HTTP/[^\n]*\n(?:[^\r\n][^\n]*\n)*\r?\n(?=HTTP/))*HTTP/[0-9.]+[ \t]+([0-9]{3})(?:[ \t]|\r?\n|$)
+```
 
 | Trigger | Severity | Condition |
 |---|---|---|
@@ -510,8 +516,12 @@ three-digit status code from the status line with one *Regular expression* prepr
 | JSON path {#NAME} | `pushit.webcheck.http.json_path[{#NAME}]` | Dependent on Response {#NAME} | Text | with the master item | 31d (Zabbix default) |
 
 **Response {#NAME}** is the same raw item as for `http_status`. **JSON path {#NAME}** has two preprocessing steps: a
-*Regular expression* step with the pattern `\r?\n\r?\n([\s\S]*)` and the output `\1` drops the headers and keeps the
-body, then a *JSONPath* step applies `{#JSON_PATH}`.
+*Regular expression* step with the output `\1` and the pattern below drops all header blocks and anything in front of
+the first `{` or `[` of the body, such as a byte order mark, then a *JSONPath* step applies `{#JSON_PATH}`.
+
+```text
+\A(?:HTTP/[^\n]*\n(?:[^\r\n][^\n]*\n)*\r?\n(?=HTTP/))*HTTP/[^\n]*\n(?:[^\r\n][^\n]*\n)*\r?\n[^{\[]*([\s\S]*)
+```
 
 | Trigger | Severity | Condition |
 |---|---|---|
