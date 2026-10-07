@@ -38,8 +38,8 @@ to check as a public one.
 - 🧾 **One macro per host.** All endpoints live in `{$PUSHIT.WEBCHECK.CONFIG}`; no item cloning.
 - 🏠 **Runs where the service runs.** Checks are Zabbix agent items, so `http://localhost:8080/health` works without
   exposing anything.
-- 🧹 **Self-cleaning.** Remove an entry from the macro and its items and triggers disappear on the next discovery
-  run.
+- 🧹 **Self-cleaning.** Remove an entry from the macro and its items and triggers are disabled on the next discovery
+  run and deleted 7 days later; put it back before then and they return with their history.
 - 📅 **Three-stage certificate alerts.** WARNING, AVERAGE and HIGH thresholds in days, chosen per endpoint.
 - ⏳ **Grace periods.** A missing response becomes a problem only after a configurable grace period; a wrong value
   is reported immediately.
@@ -109,8 +109,9 @@ Step by step:
 5. **Triggers.** Trigger prototypes compare the values with your expectations (`{#EXPECT_STATUS}`,
    `{#EXPECT_VALUE}`, `{#CERT_*_DAYS}`) and also raise a problem when no value has arrived for longer than the
    grace period.
-6. **Cleanup.** Lost resources are deleted immediately: remove an entry from the macro and its items, triggers and
-   history are gone after the next discovery run.
+6. **Cleanup.** Lost resources are disabled immediately and deleted after 7 days. When an entry leaves the macro, its
+   items and triggers are disabled on the next discovery run. If the entry comes back within 7 days, the same items are
+   enabled again with their history; otherwise items, triggers and history are deleted.
 
 Changes to the macro take effect on the next discovery run, at most 10 minutes later, or right away with
 **Execute now** on the two discovery rules.
@@ -469,8 +470,8 @@ collide and are easy to tell apart in *Latest data* and *Problems*.
 
 | Discovery rule | Key | Type | Runs | Accepts entries with | Lost resources |
 |---|---|---|---|---|---|
-| **HTTP** | `pushit.webcheck.discovery.http` | Script | every 10m | `{#TYPES}` containing `http_status` or `json_path` | Delete immediately |
-| **Certificate** | `pushit.webcheck.discovery.certificate` | Script | every 10m | `{#TYPES}` containing `certificate` | Delete immediately |
+| **HTTP** | `pushit.webcheck.discovery.http` | Script | every 10m | `{#TYPES}` containing `http_status` or `json_path` | Disable immediately, delete after 7d |
+| **Certificate** | `pushit.webcheck.discovery.certificate` | Script | every 10m | `{#TYPES}` containing `certificate` | Disable immediately, delete after 7d |
 
 Both rules receive `{$PUSHIT.WEBCHECK.CONFIG}` as the script parameter `config` and return the value of
 `JSON.parse(value).config`.
@@ -550,7 +551,7 @@ in problem state.
 ## 💡 Tips and gotchas
 
 - **Renaming an entry recreates it.** `{#NAME}` is part of the item keys, so a renamed entry produces new items and
-  triggers and deletes the old ones (including their history).
+  triggers. The new items start without history; the old ones are disabled and deleted with their history 7 days later.
 - **Plain requests from the agent.** `web.page.get` and `web.certificate.get` send unauthenticated requests without
   custom headers or body, so point them at endpoints that answer anonymously. To verify that a protected endpoint is up,
   use `http_status` with `{#EXPECT_STATUS}` `"401"`. The requests originate on the monitored host: firewalls between the
@@ -565,8 +566,9 @@ in problem state.
   URL, so `https://shop.example.com` reports `valid` where `https://localhost` reports `invalid` for the same
   certificate. Self-signed certificates yield `valid-but-self-signed`, which also fires **Certificate for {#NAME}
   is invalid**.
-- **Removed means gone.** There is no way to pause a check from the configuration: an entry taken out of the macro
-  loses its items, triggers and history on the next discovery run. If you want to disable an item, select it on the item
+- **Removed entries are disabled, then deleted.** An entry taken out of the macro has its items and triggers disabled on
+  the next discovery run and deleted with their history 7 days later. Until then a slip in the macro can be undone: put
+  the entry back and the same items return with their history. If you want to disable an item, select it on the item
   list of the host and click *Disable* instead of removing it from the macro.
 - **Invalid JSON stops discovery.** If the macro is not valid JSON, both discovery rules turn *Not supported* with
   the parse error shown in the rule status. Existing items stay as they are until the macro is fixed.
