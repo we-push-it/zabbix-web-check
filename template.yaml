@@ -19,7 +19,6 @@ zabbix_export:
             conditions:
               - macro: '{#TYPES}'
                 value: ^(.+,)*certificate(,.+)*$
-          lifetime_type: DELETE_IMMEDIATELY
           description: 'Discovery rule for items based on x509 certificate data'
           item_prototypes:
             - uuid: 6881257e2c9641039824bc4dc526e486
@@ -103,7 +102,6 @@ zabbix_export:
                 value: ^(.+,)*http_status(,.+)*$
               - macro: '{#TYPES}'
                 value: ^(.+,)*json_path(,.+)*$
-          lifetime_type: DELETE_IMMEDIATELY
           description: 'Discovery rule for items based on an HTTP response from the endpoint'
           item_prototypes:
             - uuid: a0644fcad9c249a38f28b4285e38392c
