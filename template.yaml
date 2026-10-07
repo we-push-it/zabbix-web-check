@@ -62,12 +62,16 @@ zabbix_export:
                   priority: HIGH
             - uuid: d6bfcdbd070f4f5991e9eaaf3f561b85
               name: 'Days until certificate expires ({#NAME})'
-              type: CALCULATED
+              type: DEPENDENT
               key: 'pushit.webcheck.certificate.days_until_expiration[{#NAME}]'
-              delay: 6h
               value_type: FLOAT
               units: days
-              params: 'round((last(//pushit.webcheck.certificate.not_after[{#NAME}]) - now()) / 86400, 1)'
+              preprocessing:
+                - type: JAVASCRIPT
+                  parameters:
+                    - 'return Math.round((value - Date.now() / 1000) / 86400 * 10) / 10;'
+              master_item:
+                key: 'pushit.webcheck.certificate.not_after[{#NAME}]'
               trigger_prototypes:
                 - uuid: d48d334e56e34d33a43d2d95d82d4200
                   expression: |
