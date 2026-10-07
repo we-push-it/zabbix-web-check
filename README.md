@@ -55,8 +55,8 @@ flowchart LR
     CFG(["Host macro<br/>{$PUSHIT.WEBCHECK.CONFIG}<br/>JSON array, one object per endpoint"])
 
     subgraph LLD ["Discovery rules, every 10m"]
-        DH["HTTP<br/>TYPE http_status or json_path"]
-        DC["Certificate<br/>TYPE certificate"]
+        DH["HTTP<br/>{#TYPES} contains http_status or json_path"]
+        DC["Certificate<br/>{#TYPES} contains certificate"]
     end
 
     subgraph HI ["HTTP items, every HTTP.INTERVAL"]
@@ -77,7 +77,7 @@ flowchart LR
         T2{{"Unexpected JSON value<br/>HIGH"}}
         T3{{"Certificate data unavailable<br/>INFO"}}
         T4{{"Certificate is invalid<br/>HIGH"}}
-        T5{{"Certificate will expire in N or less<br/>N = CERT_WARN / AVG / HIGH_DAYS<br/>WARNING / AVERAGE / HIGH"}}
+        T5{{"Certificate will expire in N days or less<br/>N = CERT_WARN / AVG / HIGH_DAYS<br/>WARNING / AVERAGE / HIGH"}}
     end
 
     CFG --> DH & DC
@@ -330,9 +330,9 @@ Warn 30 days before the certificate expires, escalate to AVERAGE at 14 days and 
 | Item | Days until certificate expires (www-cert) | – |
 | Trigger | Certificate data for www-cert is unavailable | INFO |
 | Trigger | Certificate for www-cert is invalid | HIGH |
-| Trigger | Certificate for www-cert will expire in 30 or less | WARNING |
-| Trigger | Certificate for www-cert will expire in 14 or less | AVERAGE |
-| Trigger | Certificate for www-cert will expire in 7 or less | HIGH |
+| Trigger | Certificate for www-cert will expire in 30 days or less | WARNING |
+| Trigger | Certificate for www-cert will expire in 14 days or less | AVERAGE |
+| Trigger | Certificate for www-cert will expire in 7 days or less | HIGH |
 
 The certificate data is fetched every 15 minutes, the days value is recalculated every 6 hours. Use the name the
 certificate was issued for (here `www.example.com`), not `localhost`, otherwise the check reports `invalid`.
@@ -475,13 +475,13 @@ collide and are easy to tell apart in *Latest data* and *Problems*.
 Both rules receive `{$PUSHIT.WEBCHECK.CONFIG}` as the script parameter `config` and return the value of
 `JSON.parse(value).config`.
 
-The **HTTP** rule creates its two dependent prototypes with *Discover* set to *No* and switches on the matching one
-with an override, so each HTTP entry ends up with the raw item plus exactly one dependent item:
+The **HTTP** rule creates its two dependent prototypes with *Discover* set to *No* and switches on the matching ones
+with overrides, so each HTTP entry ends up with the raw item plus one dependent item per HTTP check in `{#TYPES}`:
 
 | Override | Condition | Effect |
 |---|---|---|
 | Enable http_status | `{#TYPES}` contains `http_status` | Item prototypes whose name matches `^HTTP status.*$` are discovered |
-| Enable json_path | `{#TYPES}` cotnains `json_path` | Item prototypes whose name matches `^JSON path.*$` are discovered |
+| Enable json_path | `{#TYPES}` contains `json_path` | Item prototypes whose name matches `^JSON path.*$` are discovered |
 
 <details>
 <summary><strong>http_status</strong>: items and triggers</summary>
@@ -525,7 +525,7 @@ body, then a *JSONPath* step applies `{#JSON_PATH}`.
 | Item | Key | Type | Value type | Interval | History |
 |---|---|---|---|---|---|
 | Certificate data {#NAME} | `web.certificate.get["{#URL}"]` | Zabbix agent (agent 2) | Text | `{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}` | `{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}` |
-| Certificate expiration {#NAME} | `pushit.webcheck.certificate.not_after[{#NAME}]` | Dependent on Certificate data {#NAME} | Numeric (unsigned) | with the master item | 31d (Zabbix default) |
+| Certificate expiration {#NAME} | `pushit.webcheck.certificate.not_after[{#NAME}]` | Dependent on Certificate data {#NAME} | Numeric (unsigned), unit `unixtime` | with the master item | 31d (Zabbix default) |
 | Certificate validity {#NAME} | `pushit.webcheck.certificate.is_valid[{#NAME}]` | Dependent on Certificate data {#NAME} | Text | with the master item | 31d (Zabbix default) |
 | Days until certificate expires ({#NAME}) | `pushit.webcheck.certificate.days_until_expiration[{#NAME}]` | Calculated | Numeric (float), unit `days` | `6h` | 31d (Zabbix default) |
 
@@ -538,9 +538,9 @@ takes `$.result.value` (`valid`, `invalid` or `valid-but-self-signed`), and **Da
 |---|---|---|
 | Certificate data for {#NAME} is unavailable | INFO | No certificate data for `{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE}`. |
 | Certificate for {#NAME} is invalid | HIGH | The validity value is anything other than `valid`. |
-| Certificate for {#NAME} will expire in {#CERT_WARN_DAYS} or less | WARNING | Days until expiry `<= {#CERT_WARN_DAYS}`. |
-| Certificate for {#NAME} will expire in {#CERT_AVG_DAYS} or less | AVERAGE | Days until expiry `<= {#CERT_AVG_DAYS}`. |
-| Certificate for {#NAME} will expire in {#CERT_HIGH_DAYS} or less | HIGH | Days until expiry `<= {#CERT_HIGH_DAYS}`. |
+| Certificate for {#NAME} will expire in {#CERT_WARN_DAYS} days or less | WARNING | Days until expiry `<= {#CERT_WARN_DAYS}`. |
+| Certificate for {#NAME} will expire in {#CERT_AVG_DAYS} days or less | AVERAGE | Days until expiry `<= {#CERT_AVG_DAYS}`. |
+| Certificate for {#NAME} will expire in {#CERT_HIGH_DAYS} days or less | HIGH | Days until expiry `<= {#CERT_HIGH_DAYS}`. |
 
 The three expiry triggers are independent of each other: once the days drop to the HIGH threshold, all three are
 in problem state.
