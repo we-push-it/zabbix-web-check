@@ -120,7 +120,7 @@ zabbix_export:
               preprocessing:
                 - type: REGEX
                   parameters:
-                    - '\AHTTP/[0-9.]+[ \t]+([0-9]{3})(?:[ \t]|\r?\n)'
+                    - '\A(?:HTTP/[^\n]*\n(?:[^\r\n][^\n]*\n)*\r?\n(?=HTTP/))*HTTP/[0-9.]+[ \t]+([0-9]{3})(?:[ \t]|\r?\n|$)'
                     - \1
               master_item:
                 key: 'web.page.get["{#URL}"]'
@@ -144,7 +144,7 @@ zabbix_export:
               preprocessing:
                 - type: REGEX
                   parameters:
-                    - '\r?\n\r?\n([\s\S]*)'
+                    - '\A(?:HTTP/[^\n]*\n(?:[^\r\n][^\n]*\n)*\r?\n(?=HTTP/))*HTTP/[^\n]*\n(?:[^\r\n][^\n]*\n)*\r?\n[^{\[]*([\s\S]*)'
                     - \1
                 - type: JSONPATH
                   parameters:
