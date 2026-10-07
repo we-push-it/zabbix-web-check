@@ -566,8 +566,16 @@ in problem state.
   certificate. Self-signed certificates yield `valid-but-self-signed`, which also fires **Certificate for {#NAME}
   is invalid**.
 - **Removed means gone.** There is no way to pause a check from the configuration: an entry taken out of the macro
-  loses its items, triggers and history on the next discovery run. If you want to disable an item, select it on the item
-  list of the host and click *Disable* instead of removing it from the macro.
+  loses its items, triggers and history on the next discovery run. To pause a check instead, see the next tip.
+- **Pausing a check.** Pause a single check by disabling its triggers on the host or, for an HTTP check, its item
+  **HTTP status {#NAME}** or **JSON path {#NAME}**. Pause a whole host with a maintenance period. Never disable the
+  raw item **Response {#NAME}** or **Certificate data {#NAME}** on its own: an HTTP check then raises a problem after
+  the grace period although the endpoint is fine, and a certificate check silently keeps using the last certificate it
+  fetched, because its nodata trigger watches the disabled item itself. Disabling does not close an open problem: it
+  disappears from *Problems* but stays open until you enable the trigger or item again and the check recovers.
+- **Raw items disabled by hand outlive their entry.** Discovery never deletes a raw item that was disabled by hand: it
+  stays on the host when its entry is removed, and a later entry with the same raw item key takes it over, still
+  disabled. Enable the item again before you remove the entry, or delete it afterwards.
 - **Invalid JSON stops discovery.** If the macro is not valid JSON, both discovery rules turn *Not supported* with
   the parse error shown in the rule status. Existing items stay as they are until the macro is fixed.
 - **Unknown values in `{#TYPES}` are ignored.** A typo such as `http-status` matches neither rule and produces no items,
