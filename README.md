@@ -148,8 +148,9 @@ From download to the first problem in Zabbix in six steps.
 5. **Run discovery.** Wait for the next run (up to 10 minutes) or open *Data collection → Hosts*, click *Discovery*
    in the row of your host, select **HTTP** and **Certificate** and click **Execute now**. Give the server a few
    seconds after saving the macro so that its configuration cache has picked up the new value.
-6. **Check the result.** *Monitoring → Latest data*, filtered by your host, shows **Response app** (the raw HTTP
-   response) and **HTTP status app** with the value `200`. If the endpoint answers with a different status code, or
+6. **Check the result.** *Monitoring → Latest data*, filtered by your host, shows **HTTP status app** with the value
+   `200`. **Response app** is listed without a value: it fetches the raw HTTP response but does not store it.
+   If the endpoint answers with a different status code, or
    does not answer at all for more than 3 minutes, *Monitoring → Problems* shows **Unexpected status code for app**
    with severity HIGH.
 
@@ -192,8 +193,8 @@ type; add `http_status` to `{#TYPES}` if you need both.
 
 | Key | Description |
 |---|---|
-| `{#JSON_PATH}` | [Zabbix JSONPath] expression selecting the value, for example `$.status` or `$.components.db.status`. Use a definite path: an expression that returns a list yields a JSON array as text, which is hard to compare. |
-| `{#EXPECT_VALUE}` | Expected value, compared as a string. JSON strings arrive without quotes (`UP`), booleans and numbers as text (`true`, `200`). A mismatch raises **Unexpected JSON value for {#NAME}** (HIGH). |
+| `{#JSON_PATH}` | [Zabbix JSONPath] expression selecting the value, for example `$.status` or `$.components.db.status`. Use a definite path: an expression that returns a list yields a JSON array as text, which is hard to compare. Strings inside the expression need single quotes, for example `$['app-version']` or `$.checks[?(@.name=='db')].status.first()`; with double quotes, discovery cannot create the check. |
+| `{#EXPECT_VALUE}` | Expected value. JSON strings arrive without quotes (`UP`), booleans and numbers as text (`true`, `200`). Values that look like numbers are compared numerically, Zabbix suffixes included, so `1.10` equals `1.1` and `1K` equals `1024`; everything else is compared as a string. A user macro in the value, such as `{$APP.VERSION}`, is resolved before the comparison. A mismatch raises **Unexpected JSON value for {#NAME}** (HIGH). |
 
 ### `certificate`
 
@@ -201,6 +202,8 @@ Opens a TLS connection every `{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}` (default 
 [`web.certificate.get`](https://www.zabbix.com/documentation/current/en/manual/config/items/itemtypes/zabbix_agent/zabbix_agent2),
 validates the certificate chain for the host name in the URL and reads the expiry date.
 The URL must use the `https` scheme; a port is optional, a path is ignored. This type needs **Zabbix agent 2**.
+The chain is validated against the system trust store of the agent host, so a certificate issued by an internal CA
+reports `invalid` until that CA is installed there and agent 2 has been restarted.
 
 | Key | Description |
 |---|---|
@@ -343,7 +346,8 @@ A shop server. The public storefront is checked through its own name, once for t
 certificate. Two Spring Boot services answer with JSON health, a protected admin interface is expected to answer `401`
 without credentials, and an API on port 8443 has a certificate of its own. `billing-db` reads a component status,
 which Actuator only includes when `management.endpoint.health.show-components` or `show-details` is set to `always`
-(`when-authorized` does not help, the agent sends no credentials).
+(`when-authorized` does not help: the agent only sends credentials that are part of the URL, and those
+[do not belong there](#-tips-and-gotchas)).
 
 ```json
 [
@@ -590,7 +594,26 @@ in problem state.
   `zabbix_agent2 -t 'web.page.get["http://localhost:8080/health"]'` or
   `zabbix_agent2 -t 'web.certificate.get["https://www.example.com"]'` (`zabbix_agentd -t ...` for the classic
   agent), or from the server with `zabbix_get -s <agent address> -k 'web.page.get["http://localhost:8080/health"]'`.
-  The returned value is exactly what **Response {#NAME}** or **Certificate data {#NAME}** will store.
+  The output is the raw value the dependent items work with. **Response {#NAME}** does not store it, so this is the
+  way to look at a raw HTTP response.
+- **Redirects are not followed.** For a URL that redirects (`http` to `https`, `/` to `/login`, a missing trailing
+  slash), both agents return the redirect itself: `http_status` gets its status such as `301` or `302`, and `json_path`
+  finds no JSON. Use the final URL, or expect the redirect status in `{#EXPECT_STATUS}`.
+- **HTTP checks accept any certificate.** `web.page.get` does not verify the certificate, so `http_status` and
+  `json_path` on an `https` URL also pass when it is self-signed, expired or issued for another name. Add a
+  `certificate` entry for that, as in [example 4](#4-a-realistic-host-several-services-all-three-types).
+- **Keep credentials out of `{#URL}`.** Both agents send the user name and password of a URL such as
+  `http://user:secret@localhost:8080/health` as Basic authentication, but the URL also ends up in clear text in item
+  keys, trigger expressions, problem descriptions and the Zabbix server log. Storing `{$PUSHIT.WEBCHECK.CONFIG}` as a
+  secret macro does not hide it. Point the checks at endpoints that answer without authentication, or expect `401` from
+  a protected one.
+- **Check the discovery rules after every change.** When Zabbix cannot create the checks of an entry, for example
+  because of a JSON path with double quotes, a duplicate `{#NAME}` or a missing `{#JSON_PATH}`, it reports this only on
+  the host's discovery rules: open *Discovery* in the row of the host under *Data collection → Hosts* and look at the
+  *Info* column. Until the entry is fixed, its checks are missing, incomplete or outdated, and no problem is raised.
+- **Remove the template with *Unlink and clear*.** A plain *Unlink* leaves the discovery rules and everything they
+  created on the host, cut off from the template's macros: depending on which macros the host overrides, items become
+  *Not supported* and triggers turn unknown or report problems. *Unlink and clear* removes all of it.
 
 ## 🔧 Development
 
