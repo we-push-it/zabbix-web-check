@@ -38,6 +38,7 @@ zabbix_export:
               name: 'Certificate expiration {#NAME}'
               type: DEPENDENT
               key: 'pushit.webcheck.certificate.not_after[{#NAME}]'
+              units: unixtime
               preprocessing:
                 - type: JSONPATH
                   parameters:
@@ -72,21 +73,21 @@ zabbix_export:
                 - uuid: d48d334e56e34d33a43d2d95d82d4200
                   expression: |
                     last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_WARN_DAYS}
-                  name: 'Certificate for {#NAME} will expire in {#CERT_WARN_DAYS} or less'
+                  name: 'Certificate for {#NAME} will expire in {#CERT_WARN_DAYS} days or less'
                   priority: WARNING
                 - uuid: 1cc9cad76a92426383ab473e3c6df510
                   expression: |
                     last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_AVG_DAYS}
-                  name: 'Certificate for {#NAME} will expire in {#CERT_AVG_DAYS} or less'
+                  name: 'Certificate for {#NAME} will expire in {#CERT_AVG_DAYS} days or less'
                   priority: AVERAGE
                 - uuid: bed26a45d9ae43ecb186433ce69a33d1
                   expression: |
                     last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_HIGH_DAYS}
-                  name: 'Certificate for {#NAME} will expire in {#CERT_HIGH_DAYS} or less'
+                  name: 'Certificate for {#NAME} will expire in {#CERT_HIGH_DAYS} days or less'
                   priority: HIGH
-                  description: |
-                    The certificate for {#URL} will expire in {#CERT_HIGH_DAYS} or less. Immediate action required or
-                    the monitored application will become unavailable.
+                  description: >-
+                    The certificate for {#URL} will expire in {#CERT_HIGH_DAYS} days or less. Immediate action required
+                    or the monitored application will become unavailable.
           parameters:
             - name: config
               value: '{$PUSHIT.WEBCHECK.CONFIG}'
@@ -191,42 +192,42 @@ zabbix_export:
       macros:
         - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}'
           value: 90m
-          description: |
+          description: >-
             How long the history of the certificate data collection (raw, JSON data) is kept. This does not affect the
             actual checks (validity, days remaining...), only the raw data. This value should be larger than
-            PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL and must be larger than PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE.
+            PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL, must be larger than PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE and must
+            be at least 1h, the minimum history storage period of Zabbix.
         - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}'
           value: 15m
-          description: |
-            Controls the interval in which certificate data is fetched for the endpoint. This is used for
-            TYPE = certificate.
+          description: >-
+            Controls the interval in which certificate data is fetched for the endpoint. This is used for entries whose
+            {#TYPES} contains certificate.
         - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE}'
           value: 30m
-          description: |
+          description: >-
             Time expression for how long absent certificate data is tolerated before a problem of INFO severity is
-            raised. This should be higher than PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL or it will not have any effect.
-            If you raise this value, you should review the value of PUSHIT.WEBCHECK.CERTIFICATE.HISTORY and its
-            description outlining constraints applying to it.
+            raised. Must be larger than PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL, otherwise it provides no tolerance and can
+            raise false no-data problems. If you raise this value, you should review the value of
+            PUSHIT.WEBCHECK.CERTIFICATE.HISTORY and its description outlining constraints applying to it.
         - macro: '{$PUSHIT.WEBCHECK.CONFIG}'
           value: '[]'
-          description: |
+          description: >-
             Configuration for endpoints to check, see
-            [README](https://github.com/we-push-it/zabbix-web-check/blob/master/README.md) for complete documentation
-            of this structure.
+            https://github.com/we-push-it/zabbix-web-check/blob/v0.2.0/README.md for complete documentation of this
+            structure.
         - macro: '{$PUSHIT.WEBCHECK.HTTP.INTERVAL}'
           value: 1m
-          description: |
-            Controls the interval in which the HTTP endpoint is called. This is used for TYPE = http_status and
-            TYPE = json_path.
+          description: >-
+            Controls the interval in which the HTTP endpoint is called. This is used for entries whose {#TYPES} contains
+            http_status or json_path.
         - macro: '{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}'
           value: 3m
-          description: |
-            Time expression for how long an absent status code is tolerated before the status code is considered not
-            matching the expected status code. This should be higher than PUSHIT.WEBCHECK.HTTP.INTERVAL or it will not
-            have any effect.
+          description: >-
+            Time expression for how long an absent status code is tolerated before a problem is raised. Must be larger
+            than PUSHIT.WEBCHECK.HTTP.INTERVAL, otherwise it provides no tolerance and can raise false no-data problems.
         - macro: '{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}'
           value: 3m
-          description: |
+          description: >-
             Time expression for how long an absent http response (and thus JSON-path-selected value) is tolerated before
-            the JSON-path-selected value is considered not matching the expected value. This should be higher than
-            PUSHIT.WEBCHECK.HTTP.INTERVAL or it will not have any effect.
+            a problem is raised. Must be larger than PUSHIT.WEBCHECK.HTTP.INTERVAL, otherwise it provides no tolerance
+            and can raise false no-data problems.
