@@ -69,7 +69,7 @@ flowchart LR
         CRAW["Certificate data {#NAME}<br/>web.certificate.get"]
         NA["Certificate expiration {#NAME}<br/>notAfter timestamp"]
         VAL["Certificate validity {#NAME}<br/>verdict"]
-        DAYS["Days until certificate expires ({#NAME})<br/>calculated every 6h"]
+        DAYS["Days until certificate expires ({#NAME})<br/>notAfter + JavaScript"]
     end
 
     subgraph TRG ["Triggers"]
@@ -105,7 +105,7 @@ Step by step:
    HTTP entries, `web.certificate.get["{#URL}"]` for certificate entries.
 4. **Derived items.** Dependent items extract the interesting part with preprocessing (regular expression and
    JSONPath). Two overrides in the HTTP rule make sure that only the dependent item matching the entry's type is
-   created. The certificate rule adds a calculated item that turns the `notAfter` timestamp into days.
+   created. The certificate rule adds a dependent item that turns the `notAfter` timestamp into days with JavaScript.
 5. **Triggers.** Trigger prototypes compare the values with your expectations (`{#EXPECT_STATUS}`,
    `{#EXPECT_VALUE}`, `{#CERT_*_DAYS}`) and also raise a problem when no value has arrived for longer than the
    grace period.
@@ -334,7 +334,7 @@ Warn 30 days before the certificate expires, escalate to AVERAGE at 14 days and 
 | Trigger | Certificate for www-cert will expire in 14 or less | AVERAGE |
 | Trigger | Certificate for www-cert will expire in 7 or less | HIGH |
 
-The certificate data is fetched every 15 minutes, the days value is recalculated every 6 hours. Use the name the
+The certificate data is fetched every 15 minutes, the days value is recalculated with every fetch. Use the name the
 certificate was issued for (here `www.example.com`), not `localhost`, otherwise the check reports `invalid`.
 
 ### 4. A realistic host: several services, all three types
@@ -527,12 +527,13 @@ body, then a *JSONPath* step applies `{#JSON_PATH}`.
 | Certificate data {#NAME} | `web.certificate.get["{#URL}"]` | Zabbix agent (agent 2) | Text | `{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}` | `{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}` |
 | Certificate expiration {#NAME} | `pushit.webcheck.certificate.not_after[{#NAME}]` | Dependent on Certificate data {#NAME} | Numeric (unsigned) | with the master item | 31d (Zabbix default) |
 | Certificate validity {#NAME} | `pushit.webcheck.certificate.is_valid[{#NAME}]` | Dependent on Certificate data {#NAME} | Text | with the master item | 31d (Zabbix default) |
-| Days until certificate expires ({#NAME}) | `pushit.webcheck.certificate.days_until_expiration[{#NAME}]` | Calculated | Numeric (float), unit `days` | `6h` | 31d (Zabbix default) |
+| Days until certificate expires ({#NAME}) | `pushit.webcheck.certificate.days_until_expiration[{#NAME}]` | Dependent on Certificate expiration {#NAME} | Numeric (float), unit `days` | with the master item | 31d (Zabbix default) |
 
 **Certificate data {#NAME}** holds the raw certificate JSON. **Certificate expiration {#NAME}** takes
 `$.x509.not_after.timestamp` from it (the *notAfter* date as a Unix timestamp), **Certificate validity {#NAME}**
 takes `$.result.value` (`valid`, `invalid` or `valid-but-self-signed`), and **Days until certificate expires
-({#NAME})** is calculated as `round((last(//pushit.webcheck.certificate.not_after[{#NAME}]) - now()) / 86400, 1)`.
+({#NAME})** turns the *notAfter* timestamp into the remaining days, rounded to one decimal, with one *JavaScript*
+preprocessing step: `return Math.round((value - Date.now() / 1000) / 86400 * 10) / 10;`.
 
 | Trigger | Severity | Condition |
 |---|---|---|
@@ -579,10 +580,11 @@ in problem state.
 - **Missing certificate data is only INFO.** The nodata trigger of the raw certificate item has severity INFO. The
   alerts that matter come from the validity and expiry triggers. If you want it louder, raise the severity of the
   trigger prototype **Certificate data for {#NAME} is unavailable** after import.
-- **The days value moves every 6 hours.** The item **Days until certificate expires ({#NAME})** is a calculated item
-  with a 6-hour interval. The first value appears shortly after discovery, afterwards it is refreshed only every 6 hours,
-  so after a renewal the expiry problems resolve on the next run. Click **Execute now** on the item to refresh it
-  immediately and clear the problem.
+- **The days value follows the certificate data.** **Days until certificate expires ({#NAME})** is recalculated
+  every time **Certificate data {#NAME}** is fetched, so after a renewal the expiry problems resolve with the next
+  fetch, at most `{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}` later. Click **Execute now** on the item to fetch the
+  certificate right away. If a fetch fails, the item is *Not supported* and the expiry triggers neither raise nor
+  resolve problems until the next successful fetch.
 - **Slow endpoints and the item timeout.** The item prototypes set no timeout of their own, so the global timeout
   for Zabbix agent items (default 3 seconds, *Administration → General → Timeouts*) or the proxy's timeout applies.
   Raise it if a health endpoint needs longer than that.
