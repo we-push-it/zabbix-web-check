@@ -24,14 +24,14 @@ zabbix_export:
           item_prototypes:
             - uuid: 6881257e2c9641039824bc4dc526e486
               name: 'Certificate data {#NAME}'
-              key: 'web.certificate.get["{#URL}"]'
+              key: 'web.certificate.get["{#URL}#{#NAME}"]'
               delay: '{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}'
               history: '{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}'
               value_type: TEXT
               trigger_prototypes:
                 - uuid: dd2d82fb9d1546808da3a26546c69fe5
                   expression: |
-                    nodata(/PUSH IT Webcheck/web.certificate.get["{#URL}"],{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE})=1
+                    nodata(/PUSH IT Webcheck/web.certificate.get["{#URL}#{#NAME}"],{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE})=1
                   name: 'Certificate data for {#NAME} is unavailable'
                   priority: INFO
             - uuid: 26de9b6d37b84aa8b97c90eec51260c5
@@ -43,7 +43,7 @@ zabbix_export:
                   parameters:
                     - $.x509.not_after.timestamp
               master_item:
-                key: 'web.certificate.get["{#URL}"]'
+                key: 'web.certificate.get["{#URL}#{#NAME}"]'
             - uuid: b349b916eefa49cca172afb02e7fe211
               name: 'Certificate validity {#NAME}'
               type: DEPENDENT
@@ -54,7 +54,7 @@ zabbix_export:
                   parameters:
                     - $.result.value
               master_item:
-                key: 'web.certificate.get["{#URL}"]'
+                key: 'web.certificate.get["{#URL}#{#NAME}"]'
               trigger_prototypes:
                 - uuid: 654d5ceb41a74e20b6d5725505a42db7
                   expression: 'last(/PUSH IT Webcheck/pushit.webcheck.certificate.is_valid[{#NAME}]) <> "valid"'
@@ -108,7 +108,7 @@ zabbix_export:
           item_prototypes:
             - uuid: a0644fcad9c249a38f28b4285e38392c
               name: 'Response {#NAME}'
-              key: 'web.page.get["{#URL}"]'
+              key: 'web.page.get["{#URL}#{#NAME}"]'
               delay: '{$PUSHIT.WEBCHECK.HTTP.INTERVAL}'
               history: '0'
               value_type: TEXT
@@ -123,7 +123,7 @@ zabbix_export:
                     - '\AHTTP/[0-9.]+[ \t]+([0-9]{3})(?:[ \t]|\r?\n)'
                     - \1
               master_item:
-                key: 'web.page.get["{#URL}"]'
+                key: 'web.page.get["{#URL}#{#NAME}"]'
               trigger_prototypes:
                 - uuid: ba3ea028aa854c2fbc62061acb70259a
                   expression: |
@@ -150,7 +150,7 @@ zabbix_export:
                   parameters:
                     - '{#JSON_PATH}'
               master_item:
-                key: 'web.page.get["{#URL}"]'
+                key: 'web.page.get["{#URL}#{#NAME}"]'
               trigger_prototypes:
                 - uuid: 9a42683503184a378dc57cc56f3b0d6b
                   expression: |
