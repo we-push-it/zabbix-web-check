@@ -14,11 +14,12 @@ zabbix_export:
           type: SCRIPT
           key: pushit.webcheck.discovery.certificate
           delay: 10m
-          params: 'return JSON.parse(value).config'
+          params: |-
+            /* content of discovery_script.js will be put here by Makefile */
           filter:
             conditions:
               - macro: '{#TYPES}'
-                value: ^(.+,)*certificate(,.+)*$
+                value: '^(.+,)*certificate(,.+)*$'
           lifetime_type: DELETE_IMMEDIATELY
           description: 'Discovery rule for items based on x509 certificate data'
           item_prototypes:
@@ -72,37 +73,74 @@ zabbix_export:
                 - uuid: d48d334e56e34d33a43d2d95d82d4200
                   expression: |
                     last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_WARN_DAYS}
-                  name: 'Certificate for {#NAME} will expire in {#CERT_WARN_DAYS} or less'
+                  name: 'Certificate for {#NAME} will expire in {#CERT_WARN_DAYS} days or less (WARN)'
                   priority: WARNING
                 - uuid: 1cc9cad76a92426383ab473e3c6df510
                   expression: |
                     last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_AVG_DAYS}
-                  name: 'Certificate for {#NAME} will expire in {#CERT_AVG_DAYS} or less'
+                  name: 'Certificate for {#NAME} will expire in {#CERT_AVG_DAYS} days or less (AVERAGE)'
                   priority: AVERAGE
                 - uuid: bed26a45d9ae43ecb186433ce69a33d1
                   expression: |
                     last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_HIGH_DAYS}
-                  name: 'Certificate for {#NAME} will expire in {#CERT_HIGH_DAYS} or less'
+                  name: 'Certificate for {#NAME} will expire in {#CERT_HIGH_DAYS} days or less (HIGH)'
                   priority: HIGH
                   description: |
-                    The certificate for {#URL} will expire in {#CERT_HIGH_DAYS} or less. Immediate action required or
+                    The certificate for {#URL} will expire in {#CERT_HIGH_DAYS} days or less. Immediate action required or
                     the monitored application will become unavailable.
           parameters:
             - name: config
               value: '{$PUSHIT.WEBCHECK.CONFIG}'
+          overrides:
+            - name: 'Undiscover WARN trigger'
+              step: '1'
+              filter:
+                conditions:
+                  - macro: '{#CERT_WARN_DAYS}'
+                    value: ^-1$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: 'Certificate for .*? will expire in .*? days or less \(WARN\)'
+                  discover: NO_DISCOVER
+            - name: 'Undiscover AVG trigger'
+              step: '2'
+              filter:
+                conditions:
+                  - macro: '{#CERT_AVG_DAYS}'
+                    value: ^-1$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: 'Certificate for .*? will expire in .*? days or less \(AVERAGE\)'
+                  discover: NO_DISCOVER
+            - name: 'Undiscover HIGH trigger'
+              step: '3'
+              filter:
+                conditions:
+                  - macro: '{#CERT_HIGH_DAYS}'
+                    value: ^-1$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: 'Certificate for .*? will expire in .*? days or less \(HIGH\)'
+                  discover: NO_DISCOVER
         - uuid: 9894a92ce16b4476a698cf55995d56ee
           name: HTTP
           type: SCRIPT
           key: pushit.webcheck.discovery.http
           delay: 10m
-          params: 'return JSON.parse(value).config;'
+          params: |-
+            /* content of discovery_script.js will be put here by Makefile */
           filter:
             evaltype: OR
             conditions:
               - macro: '{#TYPES}'
-                value: ^(.+,)*http_status(,.+)*$
+                value: '^(.+,)*http_status(,.+)*$'
               - macro: '{#TYPES}'
-                value: ^(.+,)*json_path(,.+)*$
+                value: '^(.+,)*json_path_text(,.+)*$'
+              - macro: '{#TYPES}'
+                value: '^(.+,)*json_path_number(,.+)*$'
           lifetime_type: DELETE_IMMEDIATELY
           description: 'Discovery rule for items based on an HTTP response from the endpoint'
           item_prototypes:
@@ -136,9 +174,9 @@ zabbix_export:
                     The status code of the monitored service does not match the expected status {#EXPECT_STATUS} code or
                     no status code is available for more than {$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}.
             - uuid: 4517fccf57e3473a80e786ada27dac6b
-              name: 'JSON path {#NAME}'
+              name: 'JSON path (text) {#NAME}'
               type: DEPENDENT
-              key: 'pushit.webcheck.http.json_path[{#NAME}]'
+              key: 'pushit.webcheck.http.json_path_text[{#NAME}]'
               value_type: TEXT
               discover: NO_DISCOVER
               preprocessing:
@@ -148,21 +186,115 @@ zabbix_export:
                     - \1
                 - type: JSONPATH
                   parameters:
-                    - '{#JSON_PATH}'
+                    - '{#JSON_PATH_TEXT}'
               master_item:
                 key: 'web.page.get["{#URL}"]'
               trigger_prototypes:
-                - uuid: 9a42683503184a378dc57cc56f3b0d6b
+                - uuid: 302aad4bd03348a8b5da8c8fb1e3d5ba
                   expression: |
-                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}],{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE})=1
-                    or
-                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}])<>"{#EXPECT_VALUE}"
-                  name: 'Unexpected JSON value for {#NAME}'
-                  priority: HIGH
+                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text[{#NAME}],{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE})=1
+                  name: 'Missing JSON value for {#NAME}'
+                  priority: WARNING
                   description: |
-                    The value at "{#JSON_PATH}" in the response of the monitored service does not match the expected
-                    value of "{#EXPECT_VALUE}" or no response is available for more than
-                    {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}.
+                    The value at "{#JSON_PATH_TEXT}" in the response of the monitored service was not available for more
+                    than {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}.
+                - uuid: 4952237d989a430ca7a26365ce251990
+                  expression: |
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text[{#NAME}])<>"{#EXPECT_VALUE_TEXT}"
+                  name: 'JSON value for {#NAME} does not match expected value (text)'
+                  priority: HIGH
+                  discover: NO_DISCOVER
+                  description: |
+                    The value at "{#JSON_PATH_TEXT}" in the response of the monitored service does not match the
+                    expected value "{#EXPECT_VALUE_TEXT}".
+                - uuid: da42163600d148818d06da0adfbffc42
+                  expression: |
+                      last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text[{#NAME}])="{#EXPECT_VALUE_TEXT}"
+                  name: 'JSON value for {#NAME} matches prohibited value (text)'
+                  priority: HIGH
+                  discover: NO_DISCOVER
+                  description: |
+                    The value at "{#JSON_PATH_TEXT}" in the response of the monitored service matches the prohibited
+                    value "{#EXPECT_VALUE_TEXT}".
+            - uuid: 924b1fa1897f441388287043b06567f0
+              name: 'JSON path (number) {#NAME}'
+              type: DEPENDENT
+              key: 'pushit.webcheck.http.json_path_number[{#NAME}]'
+              value_type: FLOAT
+              discover: NO_DISCOVER
+              preprocessing:
+                - type: REGEX
+                  parameters:
+                    - '\r?\n\r?\n([\s\S]*)'
+                    - \1
+                - type: JSONPATH
+                  parameters:
+                    - '{#JSON_PATH_NUMBER}'
+              master_item:
+                key: 'web.page.get["{#URL}"]'
+              trigger_prototypes:
+                - uuid: 88adb01d02274961bf3dbadf8f7a92d0
+                  expression: |
+                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number[{#NAME}],{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE})=1
+                  name: 'Missing JSON value for {#NAME}'
+                  priority: WARNING
+                  description: |
+                    The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service was not available for
+                    more than {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}.
+                - uuid: 5fb89ee56ac94b8d9e716ca51dc7f685
+                  expression: |
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number[{#NAME}])<>{#EXPECT_VALUE_NUMBER}
+                  name: 'JSON value for {#NAME} does not match expected value (number)'
+                  priority: HIGH
+                  discover: NO_DISCOVER
+                  description: |
+                    The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service does not match the
+                    expected value "{#EXPECT_VALUE_NUMBER}".
+                - uuid: 0cefa5a1d58446be8ea2762cafdf0b62
+                  expression: |
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number[{#NAME}])={#EXPECT_VALUE_NUMBER}
+                  name: 'JSON value for {#NAME} matches prohibited value (number)'
+                  priority: HIGH
+                  discover: NO_DISCOVER
+                  description: |
+                    The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service matches the prohibited
+                    value "{#EXPECT_VALUE_NUMBER}".
+                - uuid: f9f4429faf20486d8f574e5a055d5eea
+                  expression: |
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number[{#NAME}])>={#EXPECT_VALUE_NUMBER}
+                  name: 'JSON value for {#NAME} is not below expected limit (number)'
+                  priority: HIGH
+                  discover: NO_DISCOVER
+                  description: |
+                    The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service must be less than
+                    {#EXPECT_VALUE_NUMBER}, but is greater than or equal to that limit.
+                - uuid: 2c87fac4270d44e38810fcb6e3698623
+                  expression: |
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number[{#NAME}])>{#EXPECT_VALUE_NUMBER}
+                  name: 'JSON value for {#NAME} exceeds expected maximum (number)'
+                  priority: HIGH
+                  discover: NO_DISCOVER
+                  description: |
+                    The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service must be less than or
+                    equal to {#EXPECT_VALUE_NUMBER}, but exceeds that limit.
+                - uuid: a0e9315f06b9422d9c26878a52bb4cf0
+                  expression: |
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number[{#NAME}])<={#EXPECT_VALUE_NUMBER}
+                  name: 'JSON value for {#NAME} is not above expected limit (number)'
+                  priority: HIGH
+                  discover: NO_DISCOVER
+                  description: |
+                    The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service must be greater than
+                    {#EXPECT_VALUE_NUMBER}, but is less than or equal to that limit.
+                - uuid: 1dc538495f45492e9abf7069061fbf03
+                  expression: |
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number[{#NAME}])<{#EXPECT_VALUE_NUMBER}
+                  name: 'JSON value for {#NAME} is below expected minimum (number)'
+                  priority: HIGH
+                  discover: NO_DISCOVER
+                  description: |
+                    The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service must be greater than or
+                    equal to {#EXPECT_VALUE_NUMBER}, but is below that limit.
           parameters:
             - name: config
               value: '{$PUSHIT.WEBCHECK.CONFIG}'
@@ -172,21 +304,209 @@ zabbix_export:
               filter:
                 conditions:
                   - macro: '{#TYPES}'
-                    value: ^(.+,)*http_status(,.+)*$
+                    value: '^(.+,)*http_status(,.+)*$'
               operations:
                 - operator: REGEXP
                   value: '^HTTP status.*$'
                   discover: DISCOVER
-            - name: 'Enable json_path'
+            - name: 'Enable json_path_text'
               step: '2'
               filter:
                 conditions:
                   - macro: '{#TYPES}'
-                    value: ^(.+,)*json_path(,.+)*$
+                    value: '^(.+,)*json_path_text(,.+)*$'
               operations:
                 - operator: REGEXP
-                  value: '^JSON path.*$'
+                  value: '^JSON path \(text\).*$'
                   discover: DISCOVER
+            - name: 'Enable json_path_number'
+              step: '3'
+              filter:
+                conditions:
+                  - macro: '{#TYPES}'
+                    value: '^(.+,)*json_path_number(,.+)*$'
+              operations:
+                - operator: REGEXP
+                  value: '^JSON path \(number\).*$'
+                  discover: DISCOVER
+            - name: 'Enable json_text EQUALS assertion'
+              step: '4'
+              filter:
+                conditions:
+                  - macro: '{#JSON_OPERATOR_TEXT}'
+                    value: ^=$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: '^JSON value for .*? does not match expected value \(text\)$'
+                  discover: DISCOVER
+            - name: 'Enable json_text NOT EQUALS assertion'
+              step: '5'
+              filter:
+                conditions:
+                  - macro: '{#JSON_OPERATOR_TEXT}'
+                    value: ^<>$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: '^JSON value for .*? matches prohibited value \(text\)$'
+                  discover: DISCOVER
+            - name: 'Enable json_number EQUALS assertion'
+              step: '6'
+              filter:
+                conditions:
+                  - macro: '{#JSON_OPERATOR_NUMBER}'
+                    value: ^=$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: '^JSON value for .*? does not match expected value \(number\)$'
+                  discover: DISCOVER
+            - name: 'Enable json_number NOT EQUALS assertion'
+              step: '7'
+              filter:
+                conditions:
+                  - macro: '{#JSON_OPERATOR_NUMBER}'
+                    value: ^<>$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: '^JSON value for .*? matches prohibited value \(number\)$'
+                  discover: DISCOVER
+            - name: 'Enable json_number LESS THAN assertion'
+              step: '8'
+              filter:
+                conditions:
+                  - macro: '{#JSON_OPERATOR_NUMBER}'
+                    value: ^<$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: '^JSON value for .*? is not below expected limit \(number\)$'
+                  discover: DISCOVER
+            - name: 'Enable json_number LESS THAN OR EQUALS assertion'
+              step: '9'
+              filter:
+                conditions:
+                  - macro: '{#JSON_OPERATOR_NUMBER}'
+                    value: ^<=$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: '^JSON value for .*? exceeds expected maximum \(number\)$'
+                  discover: DISCOVER
+            - name: 'Enable json_number GREATER THAN assertion'
+              step: '10'
+              filter:
+                conditions:
+                  - macro: '{#JSON_OPERATOR_NUMBER}'
+                    value: ^>$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: '^JSON value for .*? is not above expected limit \(number\)$'
+                  discover: DISCOVER
+            - name: 'Enable json_number GREATER THAN OR EQUALS assertion'
+              step: '11'
+              filter:
+                conditions:
+                  - macro: '{#JSON_OPERATOR_NUMBER}'
+                    value: ^>=$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: '^JSON value for .*? is below expected minimum \(number\)$'
+                  discover: DISCOVER
+        - uuid: 97859698c0824a8fa019ae4fcb2aedca
+          name: Performance
+          type: SCRIPT
+          key: pushit.webcheck.discovery.performance
+          delay: 10m
+          params: |-
+            /* content of discovery_script.js will be put here by Makefile */
+          filter:
+            conditions:
+              - macro: '{#TYPES}'
+                value: '^(.+,)*http_performance(,.+)*$'
+          lifetime_type: DELETE_IMMEDIATELY
+          description: 'Discovery rule for HTTP performance checks for the endpoint'
+          item_prototypes:
+            - uuid: 252b7ac30a05405c91546f13199c172e
+              name: 'HTTP performance {#NAME}'
+              key: 'web.page.perf["{#URL}"]'
+              delay: '{$PUSHIT.WEBCHECK.HTTP.INTERVAL}'
+              value_type: FLOAT
+              trigger_prototypes:
+                - uuid: 8fda601e87fa4a52ae7c1ec2e8085129
+                  expression: nodata(/PUSH IT Webcheck/web.page.perf["{#URL}"],{#PERF_NODATA})=1
+                  name: 'Missing HTTP performance data for {#NAME}'
+                  priority: WARNING
+                  description: |
+                    Performance data for {#NAME} was unavailable for {#PERF_NODATA} or more.
+                - uuid: c014d2e41ba740ce83092e0cfc5fd084
+                  expression: last(/PUSH IT Webcheck/web.page.perf["{#URL}"])>{#PERF_WARN}
+                  name: 'Performance of {#NAME} exceeds WARN limit'
+                  priority: WARNING
+                - uuid: e8fd416c7da241a3b2695a7494fd1820
+                  expression: last(/PUSH IT Webcheck/web.page.perf["{#URL}"])>{#PERF_AVG}
+                  name: 'Performance of {#NAME} exceeds AVERAGE limit'
+                  priority: AVERAGE
+                - uuid: 3353afe283c0411181e96c7326ec4786
+                  expression: last(/PUSH IT Webcheck/web.page.perf["{#URL}"])>{#PERF_HIGH}
+                  name: 'Performance of {#NAME} exceeds HIGH limit'
+                  priority: HIGH
+                - uuid: 2d02dc6a916d4fc2befc5daaa12ad680
+                  expression: last(/PUSH IT Webcheck/web.page.perf["{#URL}"])>{#PERF_DISASTER}
+                  name: 'Performance of {#NAME} exceeds DISASTER limit'
+                  priority: DISASTER
+          parameters:
+            - name: config
+              value: '{$PUSHIT.WEBCHECK.CONFIG}'
+          overrides:
+            - name: 'Undiscover WARN trigger'
+              step: '1'
+              filter:
+                conditions:
+                  - macro: '{#PERF_WARN}'
+                    value: ^-1$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: 'Performance of .*? exceeds WARN limit'
+                  discover: NO_DISCOVER
+            - name: 'Undiscover AVG trigger'
+              step: '2'
+              filter:
+                conditions:
+                  - macro: '{#PERF_AVG}'
+                    value: ^-1$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: 'Performance of .*? exceeds AVERAGE limit'
+                  discover: NO_DISCOVER
+            - name: 'Undiscover HIGH trigger'
+              step: '3'
+              filter:
+                conditions:
+                  - macro: '{#PERF_HIGH}'
+                    value: ^-1$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: 'Performance of .*? exceeds HIGH limit'
+                  discover: NO_DISCOVER
+            - name: 'Undiscover DISASTER trigger'
+              step: '4'
+              filter:
+                conditions:
+                  - macro: '{#PERF_DISASTER}'
+                    value: ^-1$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: 'Performance of .*? exceeds DISASTER limit'
+                  discover: NO_DISCOVER
 
       macros:
         - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}'
@@ -198,8 +518,8 @@ zabbix_export:
         - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}'
           value: 15m
           description: |
-            Controls the interval in which certificate data is fetched for the endpoint. This is used for
-            TYPE = certificate.
+            Controls the interval in which certificate data is fetched for the endpoint. This is used for Certificate
+            checks.
         - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE}'
           value: 30m
           description: |
@@ -208,7 +528,7 @@ zabbix_export:
             If you raise this value, you should review the value of PUSHIT.WEBCHECK.CERTIFICATE.HISTORY and its
             description outlining constraints applying to it.
         - macro: '{$PUSHIT.WEBCHECK.CONFIG}'
-          value: '[]'
+          value: '{}'
           description: |
             Configuration for endpoints to check, see
             [README](https://github.com/we-push-it/zabbix-web-check/blob/master/README.md) for complete documentation
@@ -216,8 +536,8 @@ zabbix_export:
         - macro: '{$PUSHIT.WEBCHECK.HTTP.INTERVAL}'
           value: 1m
           description: |
-            Controls the interval in which the HTTP endpoint is called. This is used for TYPE = http_status and
-            TYPE = json_path.
+            Controls the interval in which the HTTP endpoint is called. This is used for HTTP Status and JSONPath
+            checks.
         - macro: '{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}'
           value: 3m
           description: |

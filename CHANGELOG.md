@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- Support for numeric values in the JSONPath check
+- Option to override the comparison operator on JSONPath checks
+- Support for the equality ("=", default) and inequality ("<>") operators
+- Support for numeric comparisons <,>,<= and >=
+- New check type HTTP performance
+- Option to disable independent levels of check type HTTP performance
+- Option to disable independent levels of check type Certificate
+
+### Changed
+- **BC!** Configuration format changed from list of LLD objects to JSON object
+- Rename item `JSON path {#NAME}` to `JSON path (text) {#NAME}`. This change also renames the Zabbix item key from
+`pushit.webcheck.http.json_path` to `pushit.webcheck.http.json_path_text` and the internal type `json_path` to
+`json_path_text`. **Data loss:** This change leads to loosing history of the renamed items.
+- Separate `nodata()` checks from actual comparison logic
+- **Data loss:** Triggers got redesigned when support for configurable comparison operators were added. This will lead
+to the history of triggers being lost.
+
+### Fixed
+- Bad wording of trigger names "Certificate for NAME will expire in NUMBER or less", added unit so it reads "NUMBER days".
 
 ## [v0.2.0] - 2026-09-29
 ### Changed
