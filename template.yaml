@@ -86,7 +86,7 @@ zabbix_export:
                   name: 'Certificate for {#NAME} will expire in {#CERT_HIGH_DAYS} days or less (HIGH)'
                   priority: HIGH
                   description: |
-                    The certificate for {#URL} will expire in {#CERT_HIGH_DAYS} or less. Immediate action required or
+                    The certificate for {#URL} will expire in {#CERT_HIGH_DAYS} days or less. Immediate action required or
                     the monitored application will become unavailable.
           parameters:
             - name: config
