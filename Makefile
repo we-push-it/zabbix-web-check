@@ -10,7 +10,7 @@ template.dist.yaml: template.yaml .discovery_script.trimmed.js
 .discovery_script.trimmed.js: discovery_script.js
 	 grep -v '^[[:space:]]*// noinspection' $< | grep -v '^/\*' | grep -v '^\ *\*'  > $@
 
-# Run yamllint on template.yaml
-lint: template.yaml
-	yamllint template.yaml
+# Run yamllint on the template and the generated file
+lint: template.yaml template.dist.yaml
+	yamllint template.yaml template.dist.yaml
 .PHONY: lint
