@@ -1,3 +1,5 @@
+.DELETE_ON_ERROR:
+
 # Injects the discovery script (after trimming it) into the template
 template.dist.yaml: template.yaml .discovery_script.trimmed.js
 	@echo "# This is a generated file, do not modify manually.\n# All modifications should happen in these files\n#  template.yaml discovery_script.js" > $@
