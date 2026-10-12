@@ -748,11 +748,17 @@ in problem state.
 
 ## 🔧 Development
 
+### Requirements
+
+- [make](https://www.gnu.org/software/make/)
+- [yq](https://github.com/mikefarah/yq)
+- [yamllint](https://github.com/adrienverge/yamllint)
+- A zabbix server you can use for testing
+
 The template is `template.yaml` and the discovery script is in `discovery_script.js`. The final `template.dist.yaml` can
-be produced with the included Makefile. Keep the yaml files lint-clean with
-[yamllint](https://github.com/adrienverge/yamllint). The program is packaged for all major operating systems and
-installation instructions for manual installation are available on its Github repo. The configuration for yamllint is
-stored in the default, project-local rule file `.yamllint.yaml`.
+be produced with the included Makefile. Keep the yaml files lint-clean with `yamllint`. The program is packaged for all
+major operating systems and installation instructions for manual installation are available on its Github repo. The
+configuration for yamllint is stored in the default, project-local rule file `.yamllint.yaml`.
 
 To verify a change functionally, import the file into a test Zabbix (importing again updates the existing
 template), link it to a host with an agent, set a small `{$PUSHIT.WEBCHECK.CONFIG}` and run **Execute now** on all
