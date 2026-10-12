@@ -117,7 +117,7 @@ for (var key in configData) {
     }
 
     if (checkTypes.length === 0) {
-        throw "No valid check type "
+        throw 'No check configured in endpoint config "' + key + '"';
     }
     outputItem["{#TYPES}"] = checkTypes.join(",");
     output.push(outputItem);
