@@ -436,6 +436,7 @@ zabbix_export:
               key: 'web.page.perf["{#URL}"]'
               delay: '{$PUSHIT.WEBCHECK.HTTP.INTERVAL}'
               value_type: FLOAT
+              timeout: '{#PERF_TIMEOUT}'
               trigger_prototypes:
                 - uuid: 8fda601e87fa4a52ae7c1ec2e8085129
                   expression: nodata(/PUSH IT Webcheck/web.page.perf["{#URL}"],{#PERF_NODATA})=1
