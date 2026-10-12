@@ -93,7 +93,7 @@ flowchart LR
         TRG_NUM_ABSENT{{"Missing JSON value<br/>WARNING"}}
         TRG_CERT_ABSENT{{"Certificate data unavailable<br/>INFO"}}
         TRG_CERT_INVALID{{"Certificate is invalid<br/>HIGH"}}
-        TRG_CERT_EXPIRY{{"Certificate will expire in N or less<br/>N = CERT_WARN / AVG / HIGH_DAYS<br/>WARNING / AVERAGE / HIGH"}}
+        TRG_CERT_EXPIRY{{"Certificate will expire in N days or less<br/>N = CERT_WARN / AVG / HIGH_DAYS<br/>WARNING / AVERAGE / HIGH"}}
         TRG_PERF_ABSENT{{"Missing HTTP performance data<br/>WARNING"}}
         TRG_PERF_LIMIT{{"Performance exceeds limit<br/>PERF_WARN / AVG / HIGH / DISASTER<br/>WARNING / AVERAGE / HIGH / DISASTER"}}
     end
