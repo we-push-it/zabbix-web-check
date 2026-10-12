@@ -387,7 +387,7 @@ Any status code works as expectation. An endpoint behind authentication, for exa
 ### 2. JSON health endpoints
 
 Spring Boot Actuator answers `GET /actuator/health` with a body such as `{"status":"UP"}`. The first entry selects
-`$.status` and expects `UP`. The second watches a cluster which must not have more than 10 failed tasks, the
+`$.status` and expects `UP`. The second watches a cluster which must report fewer than 10 failed tasks, the
 third reads a boolean from a body like `{"ready":true}`, which is compared as the string `"true"`. The fourth monitors
 a queue-worker, which must *not* report the queue status as "full" (`{"queueStatus":"FULL"}`).
 
