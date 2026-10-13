@@ -753,6 +753,7 @@ in problem state.
 - [make](https://www.gnu.org/software/make/)
 - [yq](https://github.com/mikefarah/yq)
 - [yamllint](https://github.com/adrienverge/yamllint)
+- [duk](https://duktape.org/) for checking the discovery script
 - A zabbix server you can use for testing
 
 The template is `template.yaml` and the discovery script is in `discovery_script.js`. The final `template.dist.yaml` can
