@@ -193,7 +193,7 @@ zabbix_export:
                 - uuid: 302aad4bd03348a8b5da8c8fb1e3d5ba
                   expression: |
                     nodata(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text[{#NAME}],{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE})=1
-                  name: 'Missing JSON value for {#NAME}'
+                  name: 'Missing JSON value for {#NAME} (text)'
                   priority: WARNING
                   description: |
                     The value at "{#JSON_PATH_TEXT}" in the response of the monitored service was not available for more
@@ -236,7 +236,7 @@ zabbix_export:
                 - uuid: 88adb01d02274961bf3dbadf8f7a92d0
                   expression: |
                     nodata(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number[{#NAME}],{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE})=1
-                  name: 'Missing JSON value for {#NAME}'
+                  name: 'Missing JSON value for {#NAME} (number)'
                   priority: WARNING
                   description: |
                     The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service was not available for
