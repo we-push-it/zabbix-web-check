@@ -106,10 +106,8 @@ for (var key in configData) {
         outputItem["{#PERF_HIGH}"] = getWithFallback(item.performance, 'high', -1);
         outputItem["{#PERF_DISASTER}"] = getWithFallback(item.performance, 'disaster', -1);
 
-        /*
-         * Calculate the timeout for the web.page.performance item as the highest trigger point plus one second. This
-         * value is intentionally not configurable to avoid a configuration foot gun.
-         */
+        // Calculate the timeout for the web.page.performance item as the highest trigger point plus one second. This
+        // value is intentionally not configurable to avoid a configuration foot gun.
         var performanceTimeout = Math.max(
             outputItem["{#PERF_WARN}"],
             outputItem["{#PERF_AVG}"],
