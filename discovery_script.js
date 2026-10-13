@@ -37,7 +37,10 @@ for (var key in configData) {
     var checkTypes = [];
     var outputItem = {
         "{#NAME}": key,
-        "{#URL}": item.url
+        "{#URL}": item.url,
+        // always set, the overrides of the HTTP rule fail on a missing macro
+        "{#JSON_OPERATOR_TEXT}": "",
+        "{#JSON_OPERATOR_NUMBER}": ""
     };
 
     // http_status check
