@@ -100,8 +100,9 @@ Step by step:
    LLD macros such as `{#NAME}`, `{#URL}` and `{#TYPES}`.
 2. **Discovery.** Both rules run every 10 minutes and receive the macro through the script parameter `config`. A
    filter on `{#TYPES}` decides which rule handles an entry: **HTTP** takes `http_status` and `json_path`,
-   **Certificate** takes `certificate`. Before that, both rules check every entry: any other check type or any other
-   mistake stops both of them with an error that names the entry, see [Tips and gotchas](#-tips-and-gotchas).
+   **Certificate** takes `certificate`. Before that, both rules check every entry: an unknown check type or another
+   mistake that the check covers stops both of them with an error that names the entry, see
+   [Tips and gotchas](#-tips-and-gotchas).
 3. **Raw items.** Each entry gets one Zabbix agent item that talks to the endpoint: `web.page.get["{#URL}#{#NAME}"]`
    for HTTP entries, `web.certificate.get["{#URL}#{#NAME}"]` for certificate entries. The fragment `#{#NAME}` is never
    sent to the endpoint; it only keeps the item keys unique, so several entries can check the same URL.
@@ -174,7 +175,7 @@ are needed.
 
 | Key | Description |
 |---|---|
-| `{#NAME}` | Unique name of the check on this host. It is used unquoted inside item keys such as `pushit.webcheck.http.status[{#NAME}]`, is appended to the URL of the raw item as `#{#NAME}` and appears in item and trigger names, so use only ASCII letters, digits, `_`, `-` and `.`; no spaces, commas, brackets, quotes or `%`. Any other character stops the discovery with an error. |
+| `{#NAME}` | Unique name of the check on this host. It is used unquoted inside item keys such as `pushit.webcheck.http.status[{#NAME}]`, is appended to the URL of the raw item as `#{#NAME}` and appears in item and trigger names, so use only letters (accented Latin letters such as `ä` or `ß` included), digits, `_`, `-` and `.`; no spaces, commas, brackets, quotes or `%`. Any other character stops the discovery with an error. |
 | `{#URL}` | The endpoint as `scheme://host[:port][/path]`. The default port of the scheme and the root path apply when omitted. |
 | `{#TYPES}` | The checks to run, as a comma-separated list such as `"http_status,json_path"` or as a JSON array such as `["http_status","json_path"]`. Allowed items: `http_status`, `json_path` and `certificate`; case and spaces around the items do not matter. Any other item stops the discovery with an error. |
 
@@ -642,7 +643,7 @@ in problem state.
   the parse error shown in the rule status. Existing items stay as they are until the macro is fixed.
 - **Invalid entries stop discovery as well.** Both rules check every entry before they create anything: unknown keys
   such as the old `{#TYPE}`, unknown check types such as `http-status`, missing values, a `{#NAME}` with characters
-  other than ASCII letters, digits, `_`, `-` and `.`, status codes outside 100 to 599, day thresholds that are not
+  other than letters, digits, `_`, `-` and `.`, status codes outside 100 to 599, day thresholds that are not
   plain numbers such as `"30d"`, expected values with leading or trailing spaces, JSON paths with a syntax error or
   with `"`, and a `{#NAME}` used twice within the HTTP or within the certificate entries. Each of these turns both
   rules *Not supported*, and their *Info* column shows an error that names the entry, for example
@@ -657,9 +658,11 @@ in problem state.
 - **Values with user macros are not checked.** Status codes, day thresholds, expected values and JSON paths may
   contain user macros, for example `"{#EXPECT_STATUS}":"{$APP.STATUS}"` or `"{#JSON_PATH}":"$.{$APP.KEY}"`. Zabbix
   resolves them only when it evaluates the check, so the rules only make sure that such a value has no spaces at its
-  ends and that a JSON path contains no `"` and starts with `$` or with a macro. A misspelled or undefined macro, or
-  a macro value that does not fit, such as `7d` as a day threshold, leaves the trigger in the *Unknown* state, so it
-  never fires; in a JSON path it raises **No JSON value for {#NAME}** instead.
+  ends and that a JSON path contains no `"` and starts with `$` or with a macro. A misspelled or undefined macro
+  leaves the trigger in the *Unknown* state, so it never fires; so does a day threshold that is not a plain number,
+  such as `7d`. A status code that is not a number, such as `2xx`, is compared as text and raises
+  **Unexpected status code for {#NAME}**. In a JSON path, a wrong or undefined macro raises
+  **No JSON value for {#NAME}**.
 - **The macro value is limited to 2048 characters.** Keep the JSON compact and the names and URLs short. Depending
   on URL length, somewhere between a dozen and twenty entries fit into one macro. Count the characters as shown in
   [compact form](#compact-form).

@@ -40,11 +40,11 @@ zabbix_export:
             }
 
             function isName(value) {
-                return typeof value === 'string' && /^[A-Za-z0-9_.-]+$/.test(value);
+                return typeof value === 'string' && /^[A-Za-z0-9_.\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u024F-]+$/.test(value);
             }
 
-            // Zabbix resolves user macros such as {$APP.STATUS}, {$APP.STATUS:ctx} or {$APP.STATUS:"ctx"} after discovery, so
-            // the macro value is unknown here and a value that contains one is only checked for what does not depend on it.
+            // Zabbix resolves user macros only after discovery, so their values are unknown here and a value that contains
+            // one is only checked for what does not depend on it.
             function hasMacro(value) {
                 return typeof value === 'string' && macro.test(value);
             }
@@ -112,7 +112,7 @@ zabbix_export:
                         throw label + ': unknown key ' + JSON.stringify(key) + ', allowed keys are ' + keys.join(', ');
                     }
                 }
-                check('{#NAME}', isName, 'a name of ASCII letters, digits, "_", "-" and "."');
+                check('{#NAME}', isName, 'a name of letters, digits, "_", "-" and "."');
                 check('{#URL}', isText, 'a non-empty string');
 
                 list = entry['{#TYPES}'];
@@ -271,11 +271,11 @@ zabbix_export:
             }
 
             function isName(value) {
-                return typeof value === 'string' && /^[A-Za-z0-9_.-]+$/.test(value);
+                return typeof value === 'string' && /^[A-Za-z0-9_.\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u024F-]+$/.test(value);
             }
 
-            // Zabbix resolves user macros such as {$APP.STATUS}, {$APP.STATUS:ctx} or {$APP.STATUS:"ctx"} after discovery, so
-            // the macro value is unknown here and a value that contains one is only checked for what does not depend on it.
+            // Zabbix resolves user macros only after discovery, so their values are unknown here and a value that contains
+            // one is only checked for what does not depend on it.
             function hasMacro(value) {
                 return typeof value === 'string' && macro.test(value);
             }
@@ -343,7 +343,7 @@ zabbix_export:
                         throw label + ': unknown key ' + JSON.stringify(key) + ', allowed keys are ' + keys.join(', ');
                     }
                 }
-                check('{#NAME}', isName, 'a name of ASCII letters, digits, "_", "-" and "."');
+                check('{#NAME}', isName, 'a name of letters, digits, "_", "-" and "."');
                 check('{#URL}', isText, 'a non-empty string');
 
                 list = entry['{#TYPES}'];
