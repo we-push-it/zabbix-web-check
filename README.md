@@ -101,8 +101,9 @@ Step by step:
 2. **Discovery.** Both rules run every 10 minutes and receive the macro through the script parameter `config`. A
    filter on `{#TYPES}` decides which rule handles an entry: **HTTP** takes `http_status` and `json_path`,
    **Certificate** takes `certificate`. Anything else is ignored.
-3. **Raw items.** Each entry gets one Zabbix agent item that talks to the endpoint: `web.page.get["{#URL}"]` for
-   HTTP entries, `web.certificate.get["{#URL}"]` for certificate entries.
+3. **Raw items.** Each entry gets one Zabbix agent item that talks to the endpoint: `web.page.get["{#URL}#{#NAME}"]`
+   for HTTP entries, `web.certificate.get["{#URL}#{#NAME}"]` for certificate entries. The fragment `#{#NAME}` is never
+   sent to the endpoint; it only keeps the item keys unique, so several entries can check the same URL.
 4. **Derived items.** Dependent items extract the interesting part with preprocessing (regular expression and
    JSONPath). Two overrides in the HTTP rule make sure that only the dependent item matching the entry's type is
    created. The certificate rule adds a calculated item that turns the `notAfter` timestamp into days.
@@ -488,7 +489,7 @@ with an override, so each HTTP entry ends up with the raw item plus exactly one 
 
 | Item | Key | Type | Value type | Interval | History |
 |---|---|---|---|---|---|
-| Response {#NAME} | `web.page.get["{#URL}"]` | Zabbix agent | Text | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` | none |
+| Response {#NAME} | `web.page.get["{#URL}#{#NAME}"]` | Zabbix agent | Text | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` | none |
 | HTTP status {#NAME} | `pushit.webcheck.http.status[{#NAME}]` | Dependent on Response {#NAME} | Numeric (unsigned) | with the master item | 31d (Zabbix default) |
 
 **Response {#NAME}** holds the raw response: status line, headers and body. **HTTP status {#NAME}** extracts the
@@ -506,7 +507,7 @@ three-digit status code from the status line with one *Regular expression* prepr
 
 | Item | Key | Type | Value type | Interval | History |
 |---|---|---|---|---|---|
-| Response {#NAME} | `web.page.get["{#URL}"]` | Zabbix agent | Text | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` | none |
+| Response {#NAME} | `web.page.get["{#URL}#{#NAME}"]` | Zabbix agent | Text | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` | none |
 | JSON path {#NAME} | `pushit.webcheck.http.json_path[{#NAME}]` | Dependent on Response {#NAME} | Text | with the master item | 31d (Zabbix default) |
 
 **Response {#NAME}** is the same raw item as for `http_status`. **JSON path {#NAME}** has two preprocessing steps: a
@@ -524,7 +525,7 @@ body, then a *JSONPath* step applies `{#JSON_PATH}`.
 
 | Item | Key | Type | Value type | Interval | History |
 |---|---|---|---|---|---|
-| Certificate data {#NAME} | `web.certificate.get["{#URL}"]` | Zabbix agent (agent 2) | Text | `{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}` | `{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}` |
+| Certificate data {#NAME} | `web.certificate.get["{#URL}#{#NAME}"]` | Zabbix agent (agent 2) | Text | `{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}` | `{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}` |
 | Certificate expiration {#NAME} | `pushit.webcheck.certificate.not_after[{#NAME}]` | Dependent on Certificate data {#NAME} | Numeric (unsigned) | with the master item | 31d (Zabbix default) |
 | Certificate validity {#NAME} | `pushit.webcheck.certificate.is_valid[{#NAME}]` | Dependent on Certificate data {#NAME} | Text | with the master item | 31d (Zabbix default) |
 | Days until certificate expires ({#NAME}) | `pushit.webcheck.certificate.days_until_expiration[{#NAME}]` | Calculated | Numeric (float), unit `days` | `6h` | 31d (Zabbix default) |
