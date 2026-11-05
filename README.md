@@ -100,7 +100,8 @@ Step by step:
    LLD macros such as `{#NAME}`, `{#URL}` and `{#TYPES}`.
 2. **Discovery.** Both rules run every 10 minutes and receive the macro through the script parameter `config`. A
    filter on `{#TYPES}` decides which rule handles an entry: **HTTP** takes `http_status` and `json_path`,
-   **Certificate** takes `certificate`. Anything else is ignored.
+   **Certificate** takes `certificate`. Before that, both rules check every entry: any other check type or any other
+   mistake stops both of them with an error that names the entry, see [Tips and gotchas](#-tips-and-gotchas).
 3. **Raw items.** Each entry gets one Zabbix agent item that talks to the endpoint: `web.page.get["{#URL}#{#NAME}"]`
    for HTTP entries, `web.certificate.get["{#URL}#{#NAME}"]` for certificate entries. The fragment `#{#NAME}` is never
    sent to the endpoint; it only keeps the item keys unique, so several entries can check the same URL.
@@ -195,7 +196,7 @@ type; add `http_status` to `{#TYPES}` if you need both.
 
 | Key | Description |
 |---|---|
-| `{#JSON_PATH}` | [Zabbix JSONPath] expression selecting the value, for example `$.status` or `$.components.db.status`. Use a definite path: an expression that returns a list yields a JSON array as text, which is hard to compare. Strings inside the expression need single quotes, for example `$['app-version']` or `$.checks[?(@.name=='db')].status.first()`; with double quotes, discovery cannot create the check. Backslashes work inside such strings, for example in a regular expression; in the JSON of the macro each one is written as `\\`, as in `"$.checks[?(@.name =~ '^db\\d$')].status.first()"`. |
+| `{#JSON_PATH}` | [Zabbix JSONPath] expression selecting the value, for example `$.status` or `$.components.db.status`. Use a definite path: an expression that returns a list yields a JSON array as text, which is hard to compare. Strings inside the expression need single quotes, for example `$['app-version']` or `$.checks[?(@.name=='db')].status.first()`; double quotes stop the discovery with an error. Backslashes work inside such strings, for example in a regular expression; in the JSON of the macro each one is written as `\\`, as in `"$.checks[?(@.name =~ '^db\\d$')].status.first()"`. |
 | `{#EXPECT_VALUE}` | Expected value. JSON strings arrive without quotes (`UP`), booleans, numbers and `null` as text (`true`, `200`, `null`). Values that look like numbers are compared numerically, Zabbix suffixes included, so `1.10` equals `1.1` and `1K` equals `1024`; everything else is compared as a string. A user macro in the value, such as `{$APP.VERSION}`, is resolved before the comparison. A mismatch raises **Unexpected JSON value for {#NAME}** (HIGH). |
 
 ### `certificate`
@@ -644,10 +645,12 @@ in problem state.
   other than ASCII letters, digits, `_`, `-` and `.`, status codes outside 100 to 599, day thresholds that are not
   plain numbers such as `"30d"`, expected values with leading or trailing spaces, JSON paths with a syntax error or
   with `"`, and a `{#NAME}` used twice within the HTTP or within the certificate entries. Each of these turns both
-  rules *Not supported* with an error that names the entry. For example,
-  `Entry 1 (app): {#EXPECT_STATUS} must be a status code from 100 to 599 or a user macro for http_status, got "200 "`.
-  Existing items stay as they are until the macro is fixed. An action on internal events for low-level discovery rules
-  in *Not supported* state can alert on this.
+  rules *Not supported*, and their *Info* column shows an error that names the entry, for example
+  `Cannot execute script: Entry 1 (app): {#EXPECT_STATUS} must be a status code from 100 to 599 or a user macro for http_status, got "200 "`.
+  Existing items stay as they are and keep collecting, but discovery creates, changes and deletes nothing on the host
+  until the macro is fixed, not even the changes that come with a new version of this template. Zabbix raises no
+  problem for this; to get a message, enable the internal action *Report not supported low level discovery rules*
+  under *Alerts → Actions → Internal actions*, which is disabled by default.
 - **Errors in JSONPath filters do not stop discovery.** The rules check a JSON path only up to its first filter
   expression such as `[?(@.status == 'UP')]`. Zabbix checks the rest when it creates the item and reports an error only
   in the *Info* column of the **HTTP** rule, which stays normal. The entry is left without a working JSON path check.
@@ -687,10 +690,12 @@ in problem state.
   keys, trigger expressions, problem descriptions and the Zabbix server log. Storing `{$PUSHIT.WEBCHECK.CONFIG}` as a
   secret macro does not hide it. Point the checks at endpoints that answer without authentication, or expect `401` from
   a protected one.
-- **Check the discovery rules after every change.** When Zabbix cannot create the checks of an entry, for example
-  because of a JSON path with double quotes, a duplicate `{#NAME}` or a missing `{#JSON_PATH}`, it reports this only on
-  the host's discovery rules: open *Discovery* in the row of the host under *Data collection → Hosts* and look at the
-  *Info* column. Until the entry is fixed, its checks are missing, incomplete or outdated, and no problem is raised.
+- **Check the discovery rules after every change.** That means every change to the macro and every import of a new
+  version of this template: open *Discovery* in the row of the host under *Data collection → Hosts* and look at the
+  *Status* and *Info* columns. A mistake that the rules find turns both of them *Not supported*, see **Invalid entries
+  stop discovery as well**. A mistake that only Zabbix notices while it creates the items, such as an error inside a
+  JSONPath filter, leaves the rules in normal state and shows up only in the *Info* column. Either way, the affected
+  checks are missing, incomplete or outdated until the macro is fixed, and no problem is raised.
 - **Remove the template with *Unlink and clear*.** A plain *Unlink* leaves the discovery rules and everything they
   created on the host, cut off from the template's macros: depending on which macros the host overrides, items become
   *Not supported* and triggers turn unknown or report problems. *Unlink and clear* removes all of it.
@@ -700,7 +705,8 @@ in problem state.
 The whole template is `template.yaml`, a Zabbix 7.4 YAML export. Keep it lint-clean with
 [yamllint](https://github.com/adrienverge/yamllint). The program is packaged for all major operating systems and
 installation instructions for manual installation are available on its Github repo. The configuration for yamllint is
-stored in the default, project-local rule file `.yamllint.yaml`.
+stored in the default, project-local rule file `.yamllint.yaml`. Both discovery rules run the same script in `params`;
+change it in both places and keep the two copies identical.
 
 To verify a change functionally, import the file into a test Zabbix (importing again updates the existing
 template), link it to a host with an agent, set a small `{$PUSHIT.WEBCHECK.CONFIG}` and run **Execute now** on both
