@@ -14,7 +14,156 @@ zabbix_export:
           type: SCRIPT
           key: pushit.webcheck.discovery.certificate
           delay: 10m
-          params: 'return JSON.parse(value).config'
+          params: |
+            var keys = ['{#NAME}', '{#URL}', '{#TYPES}', '{#EXPECT_STATUS}', '{#JSON_PATH}', '{#EXPECT_VALUE}',
+                    '{#CERT_WARN_DAYS}', '{#CERT_AVG_DAYS}', '{#CERT_HIGH_DAYS}'],
+                checks = ['http_status', 'json_path', 'certificate'],
+                macro = /\{\$[A-Z0-9_.]+(?:: *(?:"(?:[^"\\]|\\"|\\(?!"))*" *|[^ "}][^}]*)?)?\}/,
+                names = {},
+                entries, entry, label;
+
+            function fail(key, what) {
+                var value = entry[key];
+
+                throw label + ': ' + key + ' must be ' + what
+                    + (value === undefined ? ', but it is missing' : ', got ' + JSON.stringify(value));
+            }
+
+            function check(key, test, what) {
+                if (!test(entry[key])) {
+                    fail(key, what);
+                }
+            }
+
+            function isText(value) {
+                return typeof value === 'string' && /\S/.test(value);
+            }
+
+            function isName(value) {
+                return typeof value === 'string' && /^[A-Za-z0-9_.\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u024F-]+$/.test(value);
+            }
+
+            // Zabbix resolves user macros only after discovery, so their values are unknown here and a value that contains
+            // one is only checked for what does not depend on it.
+            function hasMacro(value) {
+                return typeof value === 'string' && macro.test(value);
+            }
+
+            function isStatus(value) {
+                if (hasMacro(value)) {
+                    return !/^\s|\s$/.test(value);
+                }
+                return (typeof value === 'string' || typeof value === 'number') && /^[1-5][0-9][0-9]$/.test(String(value));
+            }
+
+            function isJsonPath(value) {
+                var quoted = /\.{0,2}\[\s*'[^']+'(?:\s*(?:,\s*)?'[^']+')*\s*\]/g,
+                    indexes = /\.{0,2}\[\s*(?:\*\s*|-?\d+(?:(?:\s*,\s*|\s+)-?\d+)*\s*|(?:-?\d[-\d\s]*)?:[-\d\s]*)\]/g,
+                    path = /^\$(?:\.\.?(?:\*|[\w$]+))*(?:(?:\.\.?(?:min|max|avg|length|first|sum)\(\s*\)|~)*$|\.{0,2}\[\s*\?)/;
+
+                if (typeof value !== 'string' || /"|\s$/.test(value)) {
+                    return false;
+                }
+                if (hasMacro(value)) {
+                    return value.charAt(0) === '$' || value.search(macro) === 0;
+                }
+                return /^\$[^"]+$/.test(value) && path.test(value.replace(quoted, '.*').replace(indexes, '.*'));
+            }
+
+            function isScalar(value) {
+                return (typeof value === 'string' && !/^\s|\s$/.test(value)) || typeof value === 'boolean'
+                    || (typeof value === 'number' && isFinite(value)) || value === null;
+            }
+
+            function isDays(value) {
+                if (hasMacro(value)) {
+                    return !/^\s|\s$/.test(value);
+                }
+                return (typeof value === 'string' || typeof value === 'number') && /^-?[0-9]+(\.[0-9]+)?$/.test(String(value));
+            }
+
+            try {
+                entries = JSON.parse(JSON.parse(value).config);
+            }
+            catch (error) {
+                throw 'PUSHIT.WEBCHECK.CONFIG is not valid JSON: ' + error.message;
+            }
+            if (entries && Array.isArray(entries.data)) {
+                entries = entries.data;
+            }
+            if (!Array.isArray(entries)) {
+                throw 'PUSHIT.WEBCHECK.CONFIG must be a JSON array with one object per endpoint';
+            }
+
+            for (var i = 0; i < entries.length; i++) {
+                var types = [], list, j;
+
+                entry = entries[i];
+                label = 'Entry ' + (i + 1);
+
+                if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+                    throw label + ' must be a JSON object, got ' + JSON.stringify(entry);
+                }
+                if (isText(entry['{#NAME}'])) {
+                    label += ' (' + entry['{#NAME}'] + ')';
+                }
+                for (var key in entry) {
+                    if (keys.indexOf(key) === -1) {
+                        throw label + ': unknown key ' + JSON.stringify(key) + ', allowed keys are ' + keys.join(', ');
+                    }
+                }
+                check('{#NAME}', isName, 'a name of letters, digits, "_", "-" and "."');
+                check('{#URL}', isText, 'a non-empty string');
+
+                list = entry['{#TYPES}'];
+                if (Array.isArray(list)) {
+                    list = list.join(',');
+                }
+                list = typeof list === 'string' ? list.split(',') : [];
+                for (j = 0; j < list.length; j++) {
+                    var type = list[j].trim().toLowerCase();
+
+                    if (type !== '' && checks.indexOf(type) === -1) {
+                        throw label + ': unknown check ' + JSON.stringify(list[j].trim()) + ' in {#TYPES}, allowed are '
+                            + checks.join(', ');
+                    }
+                    if (type !== '' && types.indexOf(type) === -1) {
+                        types.push(type);
+                    }
+                }
+                if (types.length === 0) {
+                    fail('{#TYPES}', 'a comma-separated list of ' + checks.join(', '));
+                }
+                entry['{#TYPES}'] = types.join(',');
+
+                if (types.indexOf('http_status') !== -1) {
+                    check('{#EXPECT_STATUS}', isStatus, 'a status code from 100 to 599 or a user macro for http_status');
+                }
+                if (types.indexOf('json_path') !== -1) {
+                    check('{#JSON_PATH}', isJsonPath, 'a JSONPath such as $.status or $.components[\'db-main\'].status'
+                        + ' for json_path, without " and without spaces outside brackets');
+                    check('{#EXPECT_VALUE}', isScalar, 'a string without leading or trailing spaces, a number, a boolean or null'
+                        + ' for json_path');
+                }
+                if (types.indexOf('certificate') !== -1) {
+                    check('{#CERT_WARN_DAYS}', isDays, 'a number of days such as "30" or a user macro for certificate');
+                    check('{#CERT_AVG_DAYS}', isDays, 'a number of days such as "14" or a user macro for certificate');
+                    check('{#CERT_HIGH_DAYS}', isDays, 'a number of days such as "7" or a user macro for certificate');
+                }
+
+                for (j = 0; j < types.length; j++) {
+                    var rule = types[j] === 'certificate' ? 'certificate' : 'HTTP',
+                        id = rule + ' ' + entry['{#NAME}'];
+
+                    if (id in names && names[id] !== i) {
+                        throw label + ': {#NAME} is already used by entry ' + (names[id] + 1) + ', ' + rule
+                            + ' entries need unique names';
+                    }
+                    names[id] = i;
+                }
+            }
+
+            return JSON.stringify(entries);
           filter:
             conditions:
               - macro: '{#TYPES}'
@@ -23,26 +172,27 @@ zabbix_export:
           item_prototypes:
             - uuid: 6881257e2c9641039824bc4dc526e486
               name: 'Certificate data {#NAME}'
-              key: 'web.certificate.get["{#URL}"]'
+              key: 'web.certificate.get["{#URL}#{#NAME}"]'
               delay: '{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}'
               history: '{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}'
               value_type: TEXT
               trigger_prototypes:
                 - uuid: dd2d82fb9d1546808da3a26546c69fe5
                   expression: |
-                    nodata(/PUSH IT Webcheck/web.certificate.get["{#URL}"],{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE})=1
+                    nodata(/PUSH IT Webcheck/web.certificate.get["{#URL}#{#NAME}"],{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE})=1
                   name: 'Certificate data for {#NAME} is unavailable'
                   priority: INFO
             - uuid: 26de9b6d37b84aa8b97c90eec51260c5
               name: 'Certificate expiration {#NAME}'
               type: DEPENDENT
               key: 'pushit.webcheck.certificate.not_after[{#NAME}]'
+              units: unixtime
               preprocessing:
                 - type: JSONPATH
                   parameters:
                     - $.x509.not_after.timestamp
               master_item:
-                key: 'web.certificate.get["{#URL}"]'
+                key: 'web.certificate.get["{#URL}#{#NAME}"]'
             - uuid: b349b916eefa49cca172afb02e7fe211
               name: 'Certificate validity {#NAME}'
               type: DEPENDENT
@@ -53,7 +203,7 @@ zabbix_export:
                   parameters:
                     - $.result.value
               master_item:
-                key: 'web.certificate.get["{#URL}"]'
+                key: 'web.certificate.get["{#URL}#{#NAME}"]'
               trigger_prototypes:
                 - uuid: 654d5ceb41a74e20b6d5725505a42db7
                   expression: 'last(/PUSH IT Webcheck/pushit.webcheck.certificate.is_valid[{#NAME}]) <> "valid"'
@@ -61,31 +211,38 @@ zabbix_export:
                   priority: HIGH
             - uuid: d6bfcdbd070f4f5991e9eaaf3f561b85
               name: 'Days until certificate expires ({#NAME})'
-              type: CALCULATED
+              type: DEPENDENT
               key: 'pushit.webcheck.certificate.days_until_expiration[{#NAME}]'
-              delay: 6h
               value_type: FLOAT
               units: days
-              params: 'round((last(//pushit.webcheck.certificate.not_after[{#NAME}]) - now()) / 86400, 1)'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.x509.not_after.timestamp
+                - type: JAVASCRIPT
+                  parameters:
+                    - 'return Math.round((value - Date.now() / 1000) / 86400 * 10) / 10;'
+              master_item:
+                key: 'web.certificate.get["{#URL}#{#NAME}"]'
               trigger_prototypes:
                 - uuid: d48d334e56e34d33a43d2d95d82d4200
                   expression: |
                     last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_WARN_DAYS}
-                  name: 'Certificate for {#NAME} will expire in {#CERT_WARN_DAYS} or less'
+                  name: 'Certificate for {#NAME} will expire in {#CERT_WARN_DAYS} days or less'
                   priority: WARNING
                 - uuid: 1cc9cad76a92426383ab473e3c6df510
                   expression: |
                     last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_AVG_DAYS}
-                  name: 'Certificate for {#NAME} will expire in {#CERT_AVG_DAYS} or less'
+                  name: 'Certificate for {#NAME} will expire in {#CERT_AVG_DAYS} days or less'
                   priority: AVERAGE
                 - uuid: bed26a45d9ae43ecb186433ce69a33d1
                   expression: |
                     last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_HIGH_DAYS}
-                  name: 'Certificate for {#NAME} will expire in {#CERT_HIGH_DAYS} or less'
+                  name: 'Certificate for {#NAME} will expire in {#CERT_HIGH_DAYS} days or less'
                   priority: HIGH
-                  description: |
-                    The certificate for {#URL} will expire in {#CERT_HIGH_DAYS} or less. Immediate action required or
-                    the monitored application will become unavailable.
+                  description: >-
+                    The certificate for {#URL} will expire in {#CERT_HIGH_DAYS} days or less. Immediate action required
+                    or the monitored application will become unavailable.
           parameters:
             - name: config
               value: '{$PUSHIT.WEBCHECK.CONFIG}'
@@ -94,7 +251,156 @@ zabbix_export:
           type: SCRIPT
           key: pushit.webcheck.discovery.http
           delay: 10m
-          params: 'return JSON.parse(value).config;'
+          params: |
+            var keys = ['{#NAME}', '{#URL}', '{#TYPES}', '{#EXPECT_STATUS}', '{#JSON_PATH}', '{#EXPECT_VALUE}',
+                    '{#CERT_WARN_DAYS}', '{#CERT_AVG_DAYS}', '{#CERT_HIGH_DAYS}'],
+                checks = ['http_status', 'json_path', 'certificate'],
+                macro = /\{\$[A-Z0-9_.]+(?:: *(?:"(?:[^"\\]|\\"|\\(?!"))*" *|[^ "}][^}]*)?)?\}/,
+                names = {},
+                entries, entry, label;
+
+            function fail(key, what) {
+                var value = entry[key];
+
+                throw label + ': ' + key + ' must be ' + what
+                    + (value === undefined ? ', but it is missing' : ', got ' + JSON.stringify(value));
+            }
+
+            function check(key, test, what) {
+                if (!test(entry[key])) {
+                    fail(key, what);
+                }
+            }
+
+            function isText(value) {
+                return typeof value === 'string' && /\S/.test(value);
+            }
+
+            function isName(value) {
+                return typeof value === 'string' && /^[A-Za-z0-9_.\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u024F-]+$/.test(value);
+            }
+
+            // Zabbix resolves user macros only after discovery, so their values are unknown here and a value that contains
+            // one is only checked for what does not depend on it.
+            function hasMacro(value) {
+                return typeof value === 'string' && macro.test(value);
+            }
+
+            function isStatus(value) {
+                if (hasMacro(value)) {
+                    return !/^\s|\s$/.test(value);
+                }
+                return (typeof value === 'string' || typeof value === 'number') && /^[1-5][0-9][0-9]$/.test(String(value));
+            }
+
+            function isJsonPath(value) {
+                var quoted = /\.{0,2}\[\s*'[^']+'(?:\s*(?:,\s*)?'[^']+')*\s*\]/g,
+                    indexes = /\.{0,2}\[\s*(?:\*\s*|-?\d+(?:(?:\s*,\s*|\s+)-?\d+)*\s*|(?:-?\d[-\d\s]*)?:[-\d\s]*)\]/g,
+                    path = /^\$(?:\.\.?(?:\*|[\w$]+))*(?:(?:\.\.?(?:min|max|avg|length|first|sum)\(\s*\)|~)*$|\.{0,2}\[\s*\?)/;
+
+                if (typeof value !== 'string' || /"|\s$/.test(value)) {
+                    return false;
+                }
+                if (hasMacro(value)) {
+                    return value.charAt(0) === '$' || value.search(macro) === 0;
+                }
+                return /^\$[^"]+$/.test(value) && path.test(value.replace(quoted, '.*').replace(indexes, '.*'));
+            }
+
+            function isScalar(value) {
+                return (typeof value === 'string' && !/^\s|\s$/.test(value)) || typeof value === 'boolean'
+                    || (typeof value === 'number' && isFinite(value)) || value === null;
+            }
+
+            function isDays(value) {
+                if (hasMacro(value)) {
+                    return !/^\s|\s$/.test(value);
+                }
+                return (typeof value === 'string' || typeof value === 'number') && /^-?[0-9]+(\.[0-9]+)?$/.test(String(value));
+            }
+
+            try {
+                entries = JSON.parse(JSON.parse(value).config);
+            }
+            catch (error) {
+                throw 'PUSHIT.WEBCHECK.CONFIG is not valid JSON: ' + error.message;
+            }
+            if (entries && Array.isArray(entries.data)) {
+                entries = entries.data;
+            }
+            if (!Array.isArray(entries)) {
+                throw 'PUSHIT.WEBCHECK.CONFIG must be a JSON array with one object per endpoint';
+            }
+
+            for (var i = 0; i < entries.length; i++) {
+                var types = [], list, j;
+
+                entry = entries[i];
+                label = 'Entry ' + (i + 1);
+
+                if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+                    throw label + ' must be a JSON object, got ' + JSON.stringify(entry);
+                }
+                if (isText(entry['{#NAME}'])) {
+                    label += ' (' + entry['{#NAME}'] + ')';
+                }
+                for (var key in entry) {
+                    if (keys.indexOf(key) === -1) {
+                        throw label + ': unknown key ' + JSON.stringify(key) + ', allowed keys are ' + keys.join(', ');
+                    }
+                }
+                check('{#NAME}', isName, 'a name of letters, digits, "_", "-" and "."');
+                check('{#URL}', isText, 'a non-empty string');
+
+                list = entry['{#TYPES}'];
+                if (Array.isArray(list)) {
+                    list = list.join(',');
+                }
+                list = typeof list === 'string' ? list.split(',') : [];
+                for (j = 0; j < list.length; j++) {
+                    var type = list[j].trim().toLowerCase();
+
+                    if (type !== '' && checks.indexOf(type) === -1) {
+                        throw label + ': unknown check ' + JSON.stringify(list[j].trim()) + ' in {#TYPES}, allowed are '
+                            + checks.join(', ');
+                    }
+                    if (type !== '' && types.indexOf(type) === -1) {
+                        types.push(type);
+                    }
+                }
+                if (types.length === 0) {
+                    fail('{#TYPES}', 'a comma-separated list of ' + checks.join(', '));
+                }
+                entry['{#TYPES}'] = types.join(',');
+
+                if (types.indexOf('http_status') !== -1) {
+                    check('{#EXPECT_STATUS}', isStatus, 'a status code from 100 to 599 or a user macro for http_status');
+                }
+                if (types.indexOf('json_path') !== -1) {
+                    check('{#JSON_PATH}', isJsonPath, 'a JSONPath such as $.status or $.components[\'db-main\'].status'
+                        + ' for json_path, without " and without spaces outside brackets');
+                    check('{#EXPECT_VALUE}', isScalar, 'a string without leading or trailing spaces, a number, a boolean or null'
+                        + ' for json_path');
+                }
+                if (types.indexOf('certificate') !== -1) {
+                    check('{#CERT_WARN_DAYS}', isDays, 'a number of days such as "30" or a user macro for certificate');
+                    check('{#CERT_AVG_DAYS}', isDays, 'a number of days such as "14" or a user macro for certificate');
+                    check('{#CERT_HIGH_DAYS}', isDays, 'a number of days such as "7" or a user macro for certificate');
+                }
+
+                for (j = 0; j < types.length; j++) {
+                    var rule = types[j] === 'certificate' ? 'certificate' : 'HTTP',
+                        id = rule + ' ' + entry['{#NAME}'];
+
+                    if (id in names && names[id] !== i) {
+                        throw label + ': {#NAME} is already used by entry ' + (names[id] + 1) + ', ' + rule
+                            + ' entries need unique names';
+                    }
+                    names[id] = i;
+                }
+            }
+
+            return JSON.stringify(entries);
           filter:
             evaltype: OR
             conditions:
@@ -106,7 +412,7 @@ zabbix_export:
           item_prototypes:
             - uuid: a0644fcad9c249a38f28b4285e38392c
               name: 'Response {#NAME}'
-              key: 'web.page.get["{#URL}"]'
+              key: 'web.page.get["{#URL}#{#NAME}"]'
               delay: '{$PUSHIT.WEBCHECK.HTTP.INTERVAL}'
               history: '0'
               value_type: TEXT
@@ -116,23 +422,56 @@ zabbix_export:
               key: 'pushit.webcheck.http.status[{#NAME}]'
               discover: NO_DISCOVER
               preprocessing:
+                - type: CHECK_NOT_SUPPORTED
+                  parameters:
+                    - '-1'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
                 - type: REGEX
                   parameters:
-                    - '\AHTTP/[0-9.]+[ \t]+([0-9]{3})(?:[ \t]|\r?\n)'
+                    - '\A(?:HTTP/[^\n]*\n(?:[^\r\n][^\n]*\n)*\r?\n(?=HTTP/))*HTTP/[0-9.]+[ \t]+([0-9]{3})(?:[ \t]|\r?\n|$)'
                     - \1
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
               master_item:
-                key: 'web.page.get["{#URL}"]'
+                key: 'web.page.get["{#URL}#{#NAME}"]'
               trigger_prototypes:
                 - uuid: ba3ea028aa854c2fbc62061acb70259a
                   expression: |
-                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}],{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE})=1
-                    or
                     last(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}])<>{#EXPECT_STATUS}
+                    and
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}])<>0
+                  recovery_mode: RECOVERY_EXPRESSION
+                  recovery_expression: |
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}])={#EXPECT_STATUS}
+                    or
+                    count(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}],{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE},"ne","0")=0
                   name: 'Unexpected status code for {#NAME}'
                   priority: HIGH
-                  description: |
-                    The status code of the monitored service does not match the expected status {#EXPECT_STATUS} code or
-                    no status code is available for more than {$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}.
+                  description: >-
+                    The status code of the monitored service does not match the expected status code {#EXPECT_STATUS}.
+                    The problem stays open until the service answers with {#EXPECT_STATUS} again. If no status code
+                    arrives for {$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}, No status code for {#NAME} takes over.
+                - uuid: 74b6bc13eb3a435da550919fdf3cdc72
+                  expression: |
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}])=0
+                    and
+                    count(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}],{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE},"ne","0")=0
+                  name: 'No status code for {#NAME}'
+                  priority: HIGH
+                  description: >-
+                    The monitored service has not answered with a status code within the last
+                    {$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}: it refused the connection, did not answer within the
+                    item timeout or sent no valid status line. HTTP status {#NAME} is 0 in that case.
+                - uuid: 0f8fa44a14fc484b8dc9b167ed2c8111
+                  expression: |
+                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}],{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE})=1
+                  name: 'No data for HTTP status {#NAME}'
+                  priority: WARNING
+                  description: >-
+                    No value at all, not even 0, has arrived for HTTP status {#NAME} for more than
+                    {$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}. The check is not running, usually because the Zabbix
+                    agent is not reachable. This says nothing about the monitored service.
             - uuid: 4517fccf57e3473a80e786ada27dac6b
               name: 'JSON path {#NAME}'
               type: DEPENDENT
@@ -140,27 +479,64 @@ zabbix_export:
               value_type: TEXT
               discover: NO_DISCOVER
               preprocessing:
+                - type: CHECK_NOT_SUPPORTED
+                  parameters:
+                    - '-1'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '[no value]'
                 - type: REGEX
                   parameters:
-                    - '\r?\n\r?\n([\s\S]*)'
+                    - '\A(?:HTTP/[^\n]*\n(?:[^\r\n][^\n]*\n)*\r?\n(?=HTTP/))*HTTP/[^\n]*\n(?:[^\r\n][^\n]*\n)*\r?\n[^{\[]*([\s\S]*)'
                     - \1
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '[no value]'
                 - type: JSONPATH
                   parameters:
                     - '{#JSON_PATH}'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '[no value]'
               master_item:
-                key: 'web.page.get["{#URL}"]'
+                key: 'web.page.get["{#URL}#{#NAME}"]'
               trigger_prototypes:
                 - uuid: 9a42683503184a378dc57cc56f3b0d6b
                   expression: |
-                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}],{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE})=1
-                    or
                     last(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}])<>"{#EXPECT_VALUE}"
+                    and
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}])<>"[no value]"
+                  recovery_mode: RECOVERY_EXPRESSION
+                  recovery_expression: >-
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}])="{#EXPECT_VALUE}"
+                    or
+                    count(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}],
+                    {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","[no value]")=0
                   name: 'Unexpected JSON value for {#NAME}'
                   priority: HIGH
-                  description: |
+                  description: >-
                     The value at "{#JSON_PATH}" in the response of the monitored service does not match the expected
-                    value of "{#EXPECT_VALUE}" or no response is available for more than
-                    {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}.
+                    value of "{#EXPECT_VALUE}". The problem stays open until the service answers with that value again.
+                    If no value can be read for {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}, No JSON value for
+                    {#NAME} takes over.
+                - uuid: e704b580f33040b8bb0183abf564358f
+                  expression: >-
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}])="[no value]"
+                    and
+                    count(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}],
+                    {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","[no value]")=0
+                  name: 'No JSON value for {#NAME}'
+                  priority: HIGH
+                  description: >-
+                    No value could be read at "{#JSON_PATH}" in the responses of the monitored service within the last
+                    {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}: the service did not answer, the body is not JSON or
+                    the path does not exist. JSON path {#NAME} is [no value] in that case.
+                - uuid: 656b1595bc2845e4b09aef1897a25b80
+                  expression: |
+                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}],{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE})=1
+                  name: 'No data for JSON path {#NAME}'
+                  priority: WARNING
+                  description: >-
+                    No value at all, not even [no value], has arrived for JSON path {#NAME} for more than
+                    {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}. The check is not running, usually because the Zabbix
+                    agent is not reachable. This says nothing about the monitored service.
           parameters:
             - name: config
               value: '{$PUSHIT.WEBCHECK.CONFIG}'
@@ -189,42 +565,42 @@ zabbix_export:
       macros:
         - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}'
           value: 90m
-          description: |
+          description: >-
             How long the history of the certificate data collection (raw, JSON data) is kept. This does not affect the
             actual checks (validity, days remaining...), only the raw data. This value should be larger than
-            PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL and must be larger than PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE.
+            PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL, must be larger than PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE and must
+            be at least 1h, the minimum history storage period of Zabbix.
         - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}'
           value: 15m
-          description: |
-            Controls the interval in which certificate data is fetched for the endpoint. This is used for
-            TYPE = certificate.
+          description: >-
+            Controls the interval in which certificate data is fetched for the endpoint. This is used for entries whose
+            {#TYPES} contains certificate.
         - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE}'
           value: 30m
-          description: |
+          description: >-
             Time expression for how long absent certificate data is tolerated before a problem of INFO severity is
-            raised. This should be higher than PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL or it will not have any effect.
-            If you raise this value, you should review the value of PUSHIT.WEBCHECK.CERTIFICATE.HISTORY and its
-            description outlining constraints applying to it.
+            raised. Must be larger than PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL, otherwise it provides no tolerance and can
+            raise false no-data problems. If you raise this value, you should review the value of
+            PUSHIT.WEBCHECK.CERTIFICATE.HISTORY and its description outlining constraints applying to it.
         - macro: '{$PUSHIT.WEBCHECK.CONFIG}'
           value: '[]'
-          description: |
+          description: >-
             Configuration for endpoints to check, see
-            [README](https://github.com/we-push-it/zabbix-web-check/blob/master/README.md) for complete documentation
-            of this structure.
+            https://github.com/we-push-it/zabbix-web-check/blob/v0.2.0/README.md for complete documentation of this
+            structure.
         - macro: '{$PUSHIT.WEBCHECK.HTTP.INTERVAL}'
           value: 1m
-          description: |
-            Controls the interval in which the HTTP endpoint is called. This is used for TYPE = http_status and
-            TYPE = json_path.
+          description: >-
+            Controls the interval in which the HTTP endpoint is called. This is used for entries whose {#TYPES} contains
+            http_status or json_path.
         - macro: '{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}'
           value: 3m
-          description: |
-            Time expression for how long an absent status code is tolerated before the status code is considered not
-            matching the expected status code. This should be higher than PUSHIT.WEBCHECK.HTTP.INTERVAL or it will not
-            have any effect.
+          description: >-
+            Time expression for how long an absent status code is tolerated before a problem is raised. Must be larger
+            than PUSHIT.WEBCHECK.HTTP.INTERVAL, otherwise it provides no tolerance and can raise false no-data problems.
         - macro: '{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}'
           value: 3m
-          description: |
+          description: >-
             Time expression for how long an absent http response (and thus JSON-path-selected value) is tolerated before
-            the JSON-path-selected value is considered not matching the expected value. This should be higher than
-            PUSHIT.WEBCHECK.HTTP.INTERVAL or it will not have any effect.
+            a problem is raised. Must be larger than PUSHIT.WEBCHECK.HTTP.INTERVAL, otherwise it provides no tolerance
+            and can raise false no-data problems.
