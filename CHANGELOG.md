@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [v0.3.0] - 2026-11-05
 ### Added
 - `No status code for {#NAME}` and `No JSON value for {#NAME}` (HIGH) for requests that fail or yield no value
 - `No data for HTTP status {#NAME}` and `No data for JSON path {#NAME}` (WARNING) for checks that get no value at all,
@@ -70,6 +72,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `json_path` check
 - `certificate` check
 
-[Unreleased]: https://github.com/we-push-it/zabbix-web-check/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/we-push-it/zabbix-web-check/compare/v0.3.0...HEAD
+[v0.3.0]: https://github.com/we-push-it/zabbix-web-check/compare/v0.2.0...v0.3.0
 [v0.2.0]: https://github.com/we-push-it/zabbix-web-check/compare/v0.1.0...v0.2.0
 [v0.1.0]: https://github.com/we-push-it/zabbix-web-check/compare/2d2d04f1...v0.1.0

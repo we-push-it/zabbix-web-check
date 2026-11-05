@@ -594,7 +594,7 @@ zabbix_export:
           value: '[]'
           description: >-
             Configuration for endpoints to check, see
-            https://github.com/we-push-it/zabbix-web-check/blob/v0.2.0/README.md for complete documentation of this
+            https://github.com/we-push-it/zabbix-web-check/blob/v0.3.0/README.md for complete documentation of this
             structure.
         - macro: '{$PUSHIT.WEBCHECK.HTTP.INTERVAL}'
           value: 1m
