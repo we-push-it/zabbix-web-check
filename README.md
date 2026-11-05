@@ -106,15 +106,18 @@ Step by step:
    for HTTP entries, `web.certificate.get["{#URL}#{#NAME}"]` for certificate entries. The fragment `#{#NAME}` is never
    sent to the endpoint; it only keeps the item keys unique, so several entries can check the same URL.
 4. **Derived items.** Dependent items extract the interesting part with preprocessing (regular expression and
-   JSONPath). Two overrides in the HTTP rule make sure that only the dependent item matching the entry's type is
-   created. The certificate rule adds a dependent item that reads the `notAfter` timestamp from the same raw data and
-   turns it into days with JavaScript.
+   JSONPath). Their keys carry the same parameter as the raw item, for example
+   `pushit.webcheck.http.status["{#URL}#{#NAME}"]`, so a new URL replaces all items of the entry at once: Zabbix
+   never moves an existing dependent item to a new raw item. Two overrides in the HTTP rule make sure that only the
+   dependent item matching the entry's type is created. The certificate rule adds a dependent item that reads the
+   `notAfter` timestamp from the same raw data and turns it into days with JavaScript.
 5. **Triggers.** Trigger prototypes compare the values with your expectations (`{#EXPECT_STATUS}`,
    `{#EXPECT_VALUE}`, `{#CERT_*_DAYS}`) and also raise a problem when no usable value has arrived within the
    grace period.
 6. **Cleanup.** Lost resources are disabled immediately and deleted after 7 days. When an entry leaves the macro, its
    items and triggers are disabled on the next discovery run. If the entry comes back within 7 days, the same items are
-   enabled again with their history; otherwise items, triggers and history are deleted.
+   enabled again with their history; otherwise items, triggers and history are deleted. An entry with a new `{#NAME}`
+   or `{#URL}` counts as a new entry: the old one is cleaned up as if it had been removed.
 
 Changes to the macro take effect on the next discovery run, at most 10 minutes later, or right away with
 **Execute now** on the two discovery rules.
@@ -176,7 +179,7 @@ are needed.
 
 | Key | Description |
 |---|---|
-| `{#NAME}` | Unique name of the check on this host. It is used unquoted inside item keys such as `pushit.webcheck.http.status[{#NAME}]`, is appended to the URL of the raw item as `#{#NAME}` and appears in item and trigger names, so use only letters (accented Latin letters such as `ä` or `ß` included), digits, `_`, `-` and `.`; no spaces, commas, brackets, quotes or `%`. Any other character stops the discovery with an error. |
+| `{#NAME}` | Unique name of the check on this host. It is appended to the URL as `#{#NAME}` in the key of every item of the entry, such as `pushit.webcheck.http.status["{#URL}#{#NAME}"]`, and appears in item and trigger names. Use only letters (accented Latin letters such as `ä` or `ß` included), digits, `_`, `-` and `.`; no spaces, commas, brackets, quotes or `%`. Any other character stops the discovery with an error. |
 | `{#URL}` | The endpoint as `scheme://host[:port][/path]`. The default port of the scheme and the root path apply when omitted. |
 | `{#TYPES}` | The checks to run, as a comma-separated list such as `"http_status,json_path"` or as a JSON array such as `["http_status","json_path"]`. Allowed items: `http_status`, `json_path` and `certificate`; case and spaces around the items do not matter. Any other item stops the discovery with an error. |
 
@@ -524,7 +527,7 @@ with overrides, so each HTTP entry ends up with the raw item plus one dependent 
 | Item | Key | Type | Value type | Interval | History |
 |---|---|---|---|---|---|
 | Response {#NAME} | `web.page.get["{#URL}#{#NAME}"]` | Zabbix agent | Text | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` | none |
-| HTTP status {#NAME} | `pushit.webcheck.http.status[{#NAME}]` | Dependent on Response {#NAME} | Numeric (unsigned) | with the master item | 31d (Zabbix default) |
+| HTTP status {#NAME} | `pushit.webcheck.http.status["{#URL}#{#NAME}"]` | Dependent on Response {#NAME} | Numeric (unsigned) | with the master item | 31d (Zabbix default) |
 
 **Response {#NAME}** fetches the raw response (status line, headers and body) but does not store it. Unlike agent 2, the
 classic Zabbix agent can put further header blocks in front of it: those of interim responses such as `103 Early Hints`,
@@ -559,7 +562,7 @@ the result of every preprocessing step.
 | Item | Key | Type | Value type | Interval | History |
 |---|---|---|---|---|---|
 | Response {#NAME} | `web.page.get["{#URL}#{#NAME}"]` | Zabbix agent | Text | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` | none |
-| JSON path {#NAME} | `pushit.webcheck.http.json_path[{#NAME}]` | Dependent on Response {#NAME} | Text | with the master item | 31d (Zabbix default) |
+| JSON path {#NAME} | `pushit.webcheck.http.json_path["{#URL}#{#NAME}"]` | Dependent on Response {#NAME} | Text | with the master item | 31d (Zabbix default) |
 
 **Response {#NAME}** is the same raw item as for `http_status`. **JSON path {#NAME}** has two preprocessing steps: a
 *Regular expression* step with the output `\1` and the pattern below drops all header blocks and anything in front of
@@ -589,9 +592,9 @@ cases *Test* on **JSON path {#NAME}** with the output of the tip **Test a check 
 | Item | Key | Type | Value type | Interval | History |
 |---|---|---|---|---|---|
 | Certificate data {#NAME} | `web.certificate.get["{#URL}#{#NAME}"]` | Zabbix agent (agent 2) | Text | `{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}` | `{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}` |
-| Certificate expiration {#NAME} | `pushit.webcheck.certificate.not_after[{#NAME}]` | Dependent on Certificate data {#NAME} | Numeric (unsigned), unit `unixtime` | with the master item | 31d (Zabbix default) |
-| Certificate validity {#NAME} | `pushit.webcheck.certificate.is_valid[{#NAME}]` | Dependent on Certificate data {#NAME} | Text | with the master item | 31d (Zabbix default) |
-| Days until certificate expires ({#NAME}) | `pushit.webcheck.certificate.days_until_expiration[{#NAME}]` | Dependent on Certificate data {#NAME} | Numeric (float), unit `days` | with the master item | 31d (Zabbix default) |
+| Certificate expiration {#NAME} | `pushit.webcheck.certificate.not_after["{#URL}#{#NAME}"]` | Dependent on Certificate data {#NAME} | Numeric (unsigned), unit `unixtime` | with the master item | 31d (Zabbix default) |
+| Certificate validity {#NAME} | `pushit.webcheck.certificate.is_valid["{#URL}#{#NAME}"]` | Dependent on Certificate data {#NAME} | Text | with the master item | 31d (Zabbix default) |
+| Days until certificate expires ({#NAME}) | `pushit.webcheck.certificate.days_until_expiration["{#URL}#{#NAME}"]` | Dependent on Certificate data {#NAME} | Numeric (float), unit `days` | with the master item | 31d (Zabbix default) |
 
 **Certificate data {#NAME}** holds the raw certificate JSON. **Certificate expiration {#NAME}** takes
 `$.x509.not_after.timestamp` from it (the *notAfter* date as a Unix timestamp), **Certificate validity {#NAME}**
@@ -614,8 +617,18 @@ in problem state.
 
 ## 💡 Tips and gotchas
 
-- **Renaming an entry recreates it.** `{#NAME}` is part of the item keys, so a renamed entry produces new items and
-  triggers. The new items start without history; the old ones are disabled and deleted with their history 7 days later.
+- **Renaming an entry or changing its URL recreates it.** `{#NAME}` and `{#URL}` are part of every item key of the
+  entry, so the next discovery run creates a new set of items and triggers for it and disables the old set. The new
+  set starts without history, and checks you paused by hand are active again. Problems of the old set disappear from
+  *Problems*, and the old set is deleted with its history 7 days later. Changing the expected values, the JSON path or
+  the day thresholds of an entry updates its items and triggers in place, with their history.
+- **After updating from v0.2.x, let discovery run once before you change a `{#URL}`.** In older versions the keys of
+  the dependent items end in `[{#NAME}]`. The first discovery run after the update renames them in place. If that same
+  run also sees a new `{#URL}` for an entry, its dependent items stay on the disabled raw item of the old URL for
+  7 days: **No data for ...** fires, failures of the new URL are not reported and certificate values stop changing.
+  So import the template, click *Execute now* on both rules of every host, check that they are not *Not supported*,
+  and only then change URLs. To repair an entry that got caught, delete the disabled **Response {#NAME}** or
+  **Certificate data {#NAME}** item with the old URL and click *Execute now*.
 - **Plain requests from the agent.** `web.page.get` and `web.certificate.get` send unauthenticated requests without
   custom headers or body, so point them at endpoints that answer anonymously. To verify that a protected endpoint is up,
   use `http_status` with `{#EXPECT_STATUS}` `"401"`. The requests originate on the monitored host: firewalls between the
@@ -641,8 +654,8 @@ in problem state.
   disabled item itself. Disabling does not close an open problem: it disappears from *Problems* but stays open until
   you enable the trigger or item again and the check recovers.
 - **Raw items disabled by hand outlive their entry.** Discovery never deletes a raw item that was disabled by hand: it
-  stays on the host when its entry is removed, and a later entry with the same raw item key takes it over, still
-  disabled. Enable the item again before you remove the entry, or delete it afterwards.
+  stays on the host when its entry is removed, renamed or given a new URL, and a later entry with the same raw item key
+  takes it over, still disabled. Enable the item again before you do that, or delete it afterwards.
 - **Invalid JSON stops discovery.** If the macro is not valid JSON, both discovery rules turn *Not supported* with
   the parse error shown in the rule status. Existing items stay as they are until the macro is fixed.
 - **Invalid entries stop discovery as well.** Both rules check every entry before they create anything: unknown keys
@@ -697,10 +710,10 @@ in problem state.
   `json_path` on an `https` URL also pass when it is self-signed, expired or issued for another name. Add a
   `certificate` entry for that, as in [example 4](#4-a-realistic-host-several-services-all-three-types).
 - **Keep credentials out of `{#URL}`.** Both agents send the user name and password of a URL such as
-  `http://user:secret@localhost:8080/health` as Basic authentication, but the URL also ends up in clear text in item
-  keys, trigger expressions, problem descriptions and the Zabbix server log. Storing `{$PUSHIT.WEBCHECK.CONFIG}` as a
-  secret macro does not hide it. Point the checks at endpoints that answer without authentication, or expect `401` from
-  a protected one.
+  `http://user:secret@localhost:8080/health` as Basic authentication, but the URL also ends up in clear text in the
+  keys of all items of the entry, in all of its trigger expressions, in problem descriptions and in the Zabbix server
+  log. Storing `{$PUSHIT.WEBCHECK.CONFIG}` as a secret macro does not hide it. Point the checks at endpoints that
+  answer without authentication, or expect `401` from a protected one.
 - **Check the discovery rules after every change.** That means every change to the macro and every import of a new
   version of this template: open *Discovery* in the row of the host under *Data collection → Hosts* and look at the
   *Status* and *Info* columns. A mistake that the rules find turns both of them *Not supported*, see **Invalid entries

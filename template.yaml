@@ -185,7 +185,7 @@ zabbix_export:
             - uuid: 26de9b6d37b84aa8b97c90eec51260c5
               name: 'Certificate expiration {#NAME}'
               type: DEPENDENT
-              key: 'pushit.webcheck.certificate.not_after[{#NAME}]'
+              key: 'pushit.webcheck.certificate.not_after["{#URL}#{#NAME}"]'
               units: unixtime
               preprocessing:
                 - type: JSONPATH
@@ -196,7 +196,7 @@ zabbix_export:
             - uuid: b349b916eefa49cca172afb02e7fe211
               name: 'Certificate validity {#NAME}'
               type: DEPENDENT
-              key: 'pushit.webcheck.certificate.is_valid[{#NAME}]'
+              key: 'pushit.webcheck.certificate.is_valid["{#URL}#{#NAME}"]'
               value_type: TEXT
               preprocessing:
                 - type: JSONPATH
@@ -206,13 +206,13 @@ zabbix_export:
                 key: 'web.certificate.get["{#URL}#{#NAME}"]'
               trigger_prototypes:
                 - uuid: 654d5ceb41a74e20b6d5725505a42db7
-                  expression: 'last(/PUSH IT Webcheck/pushit.webcheck.certificate.is_valid[{#NAME}]) <> "valid"'
+                  expression: 'last(/PUSH IT Webcheck/pushit.webcheck.certificate.is_valid["{#URL}#{#NAME}"]) <> "valid"'
                   name: 'Certificate for {#NAME} is invalid'
                   priority: HIGH
             - uuid: d6bfcdbd070f4f5991e9eaaf3f561b85
               name: 'Days until certificate expires ({#NAME})'
               type: DEPENDENT
-              key: 'pushit.webcheck.certificate.days_until_expiration[{#NAME}]'
+              key: 'pushit.webcheck.certificate.days_until_expiration["{#URL}#{#NAME}"]'
               value_type: FLOAT
               units: days
               preprocessing:
@@ -227,17 +227,17 @@ zabbix_export:
               trigger_prototypes:
                 - uuid: d48d334e56e34d33a43d2d95d82d4200
                   expression: |
-                    last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_WARN_DAYS}
+                    last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration["{#URL}#{#NAME}"]) <= {#CERT_WARN_DAYS}
                   name: 'Certificate for {#NAME} will expire in {#CERT_WARN_DAYS} days or less'
                   priority: WARNING
                 - uuid: 1cc9cad76a92426383ab473e3c6df510
                   expression: |
-                    last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_AVG_DAYS}
+                    last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration["{#URL}#{#NAME}"]) <= {#CERT_AVG_DAYS}
                   name: 'Certificate for {#NAME} will expire in {#CERT_AVG_DAYS} days or less'
                   priority: AVERAGE
                 - uuid: bed26a45d9ae43ecb186433ce69a33d1
                   expression: |
-                    last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_HIGH_DAYS}
+                    last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration["{#URL}#{#NAME}"]) <= {#CERT_HIGH_DAYS}
                   name: 'Certificate for {#NAME} will expire in {#CERT_HIGH_DAYS} days or less'
                   priority: HIGH
                   description: >-
@@ -419,7 +419,7 @@ zabbix_export:
             - uuid: d62950d3aa92463e982e4a8ea60c4169
               name: 'HTTP status {#NAME}'
               type: DEPENDENT
-              key: 'pushit.webcheck.http.status[{#NAME}]'
+              key: 'pushit.webcheck.http.status["{#URL}#{#NAME}"]'
               discover: NO_DISCOVER
               preprocessing:
                 - type: CHECK_NOT_SUPPORTED
@@ -438,14 +438,15 @@ zabbix_export:
               trigger_prototypes:
                 - uuid: ba3ea028aa854c2fbc62061acb70259a
                   expression: |
-                    last(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}])<>{#EXPECT_STATUS}
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.status["{#URL}#{#NAME}"])<>{#EXPECT_STATUS}
                     and
-                    last(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}])<>0
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.status["{#URL}#{#NAME}"])<>0
                   recovery_mode: RECOVERY_EXPRESSION
-                  recovery_expression: |
-                    last(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}])={#EXPECT_STATUS}
+                  recovery_expression: >-
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.status["{#URL}#{#NAME}"])={#EXPECT_STATUS}
                     or
-                    count(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}],{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE},"ne","0")=0
+                    count(/PUSH IT Webcheck/pushit.webcheck.http.status["{#URL}#{#NAME}"],
+                    {$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE},"ne","0")=0
                   name: 'Unexpected status code for {#NAME}'
                   priority: HIGH
                   description: >-
@@ -453,10 +454,11 @@ zabbix_export:
                     The problem stays open until the service answers with {#EXPECT_STATUS} again. If no status code
                     arrives for {$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}, No status code for {#NAME} takes over.
                 - uuid: 74b6bc13eb3a435da550919fdf3cdc72
-                  expression: |
-                    last(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}])=0
+                  expression: >-
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.status["{#URL}#{#NAME}"])=0
                     and
-                    count(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}],{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE},"ne","0")=0
+                    count(/PUSH IT Webcheck/pushit.webcheck.http.status["{#URL}#{#NAME}"],
+                    {$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE},"ne","0")=0
                   name: 'No status code for {#NAME}'
                   priority: HIGH
                   description: >-
@@ -465,7 +467,7 @@ zabbix_export:
                     item timeout or sent no valid status line. HTTP status {#NAME} is 0 in that case.
                 - uuid: 0f8fa44a14fc484b8dc9b167ed2c8111
                   expression: |
-                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}],{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE})=1
+                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.status["{#URL}#{#NAME}"],{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE})=1
                   name: 'No data for HTTP status {#NAME}'
                   priority: WARNING
                   description: >-
@@ -475,7 +477,7 @@ zabbix_export:
             - uuid: 4517fccf57e3473a80e786ada27dac6b
               name: 'JSON path {#NAME}'
               type: DEPENDENT
-              key: 'pushit.webcheck.http.json_path[{#NAME}]'
+              key: 'pushit.webcheck.http.json_path["{#URL}#{#NAME}"]'
               value_type: TEXT
               discover: NO_DISCOVER
               preprocessing:
@@ -500,14 +502,14 @@ zabbix_export:
               trigger_prototypes:
                 - uuid: 9a42683503184a378dc57cc56f3b0d6b
                   expression: |
-                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}])<>"{#EXPECT_VALUE}"
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path["{#URL}#{#NAME}"])<>"{#EXPECT_VALUE}"
                     and
-                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}])<>"[no value]"
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path["{#URL}#{#NAME}"])<>"[no value]"
                   recovery_mode: RECOVERY_EXPRESSION
                   recovery_expression: >-
-                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}])="{#EXPECT_VALUE}"
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path["{#URL}#{#NAME}"])="{#EXPECT_VALUE}"
                     or
-                    count(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}],
+                    count(/PUSH IT Webcheck/pushit.webcheck.http.json_path["{#URL}#{#NAME}"],
                     {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","[no value]")=0
                   name: 'Unexpected JSON value for {#NAME}'
                   priority: HIGH
@@ -518,9 +520,9 @@ zabbix_export:
                     {#NAME} takes over.
                 - uuid: e704b580f33040b8bb0183abf564358f
                   expression: >-
-                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}])="[no value]"
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path["{#URL}#{#NAME}"])="[no value]"
                     and
-                    count(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}],
+                    count(/PUSH IT Webcheck/pushit.webcheck.http.json_path["{#URL}#{#NAME}"],
                     {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","[no value]")=0
                   name: 'No JSON value for {#NAME}'
                   priority: HIGH
@@ -529,8 +531,9 @@ zabbix_export:
                     {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}: the service did not answer, the body is not JSON or
                     the path does not exist. JSON path {#NAME} is [no value] in that case.
                 - uuid: 656b1595bc2845e4b09aef1897a25b80
-                  expression: |
-                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.json_path[{#NAME}],{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE})=1
+                  expression: >-
+                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.json_path["{#URL}#{#NAME}"],
+                    {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE})=1
                   name: 'No data for JSON path {#NAME}'
                   priority: WARNING
                   description: >-
