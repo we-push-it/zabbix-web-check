@@ -39,6 +39,10 @@ zabbix_export:
                 return typeof value === 'string' && /\S/.test(value);
             }
 
+            function isName(value) {
+                return typeof value === 'string' && /^[A-Za-z0-9_.-]+$/.test(value);
+            }
+
             // Zabbix resolves user macros such as {$APP.STATUS}, {$APP.STATUS:ctx} or {$APP.STATUS:"ctx"} after discovery, so
             // the macro value is unknown here and a value that contains one is only checked for what does not depend on it.
             function hasMacro(value) {
@@ -108,7 +112,7 @@ zabbix_export:
                         throw label + ': unknown key ' + JSON.stringify(key) + ', allowed keys are ' + keys.join(', ');
                     }
                 }
-                check('{#NAME}', isText, 'a non-empty string');
+                check('{#NAME}', isName, 'a name of ASCII letters, digits, "_", "-" and "."');
                 check('{#URL}', isText, 'a non-empty string');
 
                 list = entry['{#TYPES}'];
@@ -266,6 +270,10 @@ zabbix_export:
                 return typeof value === 'string' && /\S/.test(value);
             }
 
+            function isName(value) {
+                return typeof value === 'string' && /^[A-Za-z0-9_.-]+$/.test(value);
+            }
+
             // Zabbix resolves user macros such as {$APP.STATUS}, {$APP.STATUS:ctx} or {$APP.STATUS:"ctx"} after discovery, so
             // the macro value is unknown here and a value that contains one is only checked for what does not depend on it.
             function hasMacro(value) {
@@ -335,7 +343,7 @@ zabbix_export:
                         throw label + ': unknown key ' + JSON.stringify(key) + ', allowed keys are ' + keys.join(', ');
                     }
                 }
-                check('{#NAME}', isText, 'a non-empty string');
+                check('{#NAME}', isName, 'a name of ASCII letters, digits, "_", "-" and "."');
                 check('{#URL}', isText, 'a non-empty string');
 
                 list = entry['{#TYPES}'];

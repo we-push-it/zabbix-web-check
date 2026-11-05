@@ -173,7 +173,7 @@ are needed.
 
 | Key | Description |
 |---|---|
-| `{#NAME}` | Unique name of the check on this host. It is used unquoted inside item keys such as `pushit.webcheck.http.status[{#NAME}]` and appears in item and trigger names, so use only letters, digits, `_`, `-` and `.`; no spaces, commas, brackets or quotes. |
+| `{#NAME}` | Unique name of the check on this host. It is used unquoted inside item keys such as `pushit.webcheck.http.status[{#NAME}]`, is appended to the URL of the raw item as `#{#NAME}` and appears in item and trigger names, so use only ASCII letters, digits, `_`, `-` and `.`; no spaces, commas, brackets, quotes or `%`. Any other character stops the discovery with an error. |
 | `{#URL}` | The endpoint as `scheme://host[:port][/path]`. The default port of the scheme and the root path apply when omitted. |
 | `{#TYPES}` | The checks to run, as a comma-separated list such as `"http_status,json_path"` or as a JSON array such as `["http_status","json_path"]`. Allowed items: `http_status`, `json_path` and `certificate`; case and spaces around the items do not matter. Any other item stops the discovery with an error. |
 
@@ -640,10 +640,11 @@ in problem state.
 - **Invalid JSON stops discovery.** If the macro is not valid JSON, both discovery rules turn *Not supported* with
   the parse error shown in the rule status. Existing items stay as they are until the macro is fixed.
 - **Invalid entries stop discovery as well.** Both rules check every entry before they create anything: unknown keys
-  such as the old `{#TYPE}`, unknown check types such as `http-status`, missing values, status codes outside 100 to
-  599, day thresholds that are not plain numbers such as `"30d"`, expected values with leading or trailing spaces,
-  JSON paths with a syntax error or with `"`, and a `{#NAME}` used twice within the HTTP or within the certificate
-  entries. Each of these turns both rules *Not supported* with an error that names the entry. For example,
+  such as the old `{#TYPE}`, unknown check types such as `http-status`, missing values, a `{#NAME}` with characters
+  other than ASCII letters, digits, `_`, `-` and `.`, status codes outside 100 to 599, day thresholds that are not
+  plain numbers such as `"30d"`, expected values with leading or trailing spaces, JSON paths with a syntax error or
+  with `"`, and a `{#NAME}` used twice within the HTTP or within the certificate entries. Each of these turns both
+  rules *Not supported* with an error that names the entry. For example,
   `Entry 1 (app): {#EXPECT_STATUS} must be a status code from 100 to 599 or a user macro for http_status, got "200 "`.
   Existing items stay as they are until the macro is fixed. An action on internal events for low-level discovery rules
   in *Not supported* state can alert on this.
