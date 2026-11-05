@@ -85,8 +85,7 @@ flowchart LR
     RAW -->|http_status| ST
     RAW -->|json_path| JP
     DC --> CRAW
-    CRAW --> NA & VAL
-    NA --> DAYS
+    CRAW --> NA & VAL & DAYS
     ST --> T1
     JP --> T2
     CRAW --> T3
@@ -106,7 +105,8 @@ Step by step:
    sent to the endpoint; it only keeps the item keys unique, so several entries can check the same URL.
 4. **Derived items.** Dependent items extract the interesting part with preprocessing (regular expression and
    JSONPath). Two overrides in the HTTP rule make sure that only the dependent item matching the entry's type is
-   created. The certificate rule adds a dependent item that turns the `notAfter` timestamp into days with JavaScript.
+   created. The certificate rule adds a dependent item that reads the `notAfter` timestamp from the same raw data and
+   turns it into days with JavaScript.
 5. **Triggers.** Trigger prototypes compare the values with your expectations (`{#EXPECT_STATUS}`,
    `{#EXPECT_VALUE}`, `{#CERT_*_DAYS}`) and also raise a problem when no usable value has arrived within the
    grace period.
@@ -585,13 +585,13 @@ cases *Test* on **JSON path {#NAME}** with the output of the tip **Test a check 
 | Certificate data {#NAME} | `web.certificate.get["{#URL}#{#NAME}"]` | Zabbix agent (agent 2) | Text | `{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}` | `{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}` |
 | Certificate expiration {#NAME} | `pushit.webcheck.certificate.not_after[{#NAME}]` | Dependent on Certificate data {#NAME} | Numeric (unsigned), unit `unixtime` | with the master item | 31d (Zabbix default) |
 | Certificate validity {#NAME} | `pushit.webcheck.certificate.is_valid[{#NAME}]` | Dependent on Certificate data {#NAME} | Text | with the master item | 31d (Zabbix default) |
-| Days until certificate expires ({#NAME}) | `pushit.webcheck.certificate.days_until_expiration[{#NAME}]` | Dependent on Certificate expiration {#NAME} | Numeric (float), unit `days` | with the master item | 31d (Zabbix default) |
+| Days until certificate expires ({#NAME}) | `pushit.webcheck.certificate.days_until_expiration[{#NAME}]` | Dependent on Certificate data {#NAME} | Numeric (float), unit `days` | with the master item | 31d (Zabbix default) |
 
 **Certificate data {#NAME}** holds the raw certificate JSON. **Certificate expiration {#NAME}** takes
 `$.x509.not_after.timestamp` from it (the *notAfter* date as a Unix timestamp), **Certificate validity {#NAME}**
 takes `$.result.value` (`valid`, `invalid` or `valid-but-self-signed`), and **Days until certificate expires
-({#NAME})** turns the *notAfter* timestamp into the remaining days, rounded to one decimal, with one *JavaScript*
-preprocessing step: `return Math.round((value - Date.now() / 1000) / 86400 * 10) / 10;`.
+({#NAME})** takes the same `$.x509.not_after.timestamp` and turns it into the remaining days, rounded to one decimal,
+with a second, *JavaScript* preprocessing step: `return Math.round((value - Date.now() / 1000) / 86400 * 10) / 10;`.
 
 | Trigger | Severity | Condition |
 |---|---|---|
@@ -629,9 +629,10 @@ in problem state.
 - **Pausing a check.** Pause a single check by disabling its triggers on the host or, for an HTTP check, its item
   **HTTP status {#NAME}** or **JSON path {#NAME}**. Pause a whole host with a maintenance period. Never disable the
   raw item **Response {#NAME}** or **Certificate data {#NAME}** on its own: an HTTP check then raises a problem after
-  the grace period although the endpoint is fine, and a certificate check silently keeps using the last certificate it
-  fetched, because its nodata trigger watches the disabled item itself. Disabling does not close an open problem: it
-  disappears from *Problems* but stays open until you enable the trigger or item again and the check recovers.
+  the grace period although the endpoint is fine, and a certificate check silently freezes: validity and days keep
+  their last values and its triggers neither raise nor resolve problems, because its nodata trigger watches the
+  disabled item itself. Disabling does not close an open problem: it disappears from *Problems* but stays open until
+  you enable the trigger or item again and the check recovers.
 - **Raw items disabled by hand outlive their entry.** Discovery never deletes a raw item that was disabled by hand: it
   stays on the host when its entry is removed, and a later entry with the same raw item key takes it over, still
   disabled. Enable the item again before you remove the entry, or delete it afterwards.
@@ -643,14 +644,17 @@ in problem state.
 - **The macro value is limited to 2048 characters.** Keep the JSON compact and the names and URLs short. Depending
   on URL length, somewhere between a dozen and twenty entries fit into one macro. Count the characters as shown in
   [compact form](#compact-form).
-- **Missing certificate data is only INFO.** The nodata trigger of the raw certificate item has severity INFO. The
-  alerts that matter come from the validity and expiry triggers. If you want it louder, raise the severity of the
-  trigger prototype **Certificate data for {#NAME} is unavailable** after import.
+- **Missing certificate data is only INFO.** The nodata trigger of the raw certificate item has severity INFO, but it
+  is the only certificate trigger that notices when no data arrives: the validity and expiry triggers then neither
+  raise nor resolve problems, even if the certificate expires in the meantime (see the next tip). If you want it
+  louder, raise the severity of the trigger prototype **Certificate data for {#NAME} is unavailable** after import.
 - **The days value follows the certificate data.** **Days until certificate expires ({#NAME})** is recalculated
   every time **Certificate data {#NAME}** is fetched, so after a renewal the expiry problems resolve with the next
   fetch, at most `{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}` later. Click **Execute now** on the item to fetch the
-  certificate right away. If a fetch fails, the item is *Not supported* and the expiry triggers neither raise nor
-  resolve problems until the next successful fetch.
+  certificate right away. Without new data the value does not count down: if a fetch fails, the item is
+  *Not supported*, and while the agent is unreachable it keeps its last value. In both cases the expiry triggers
+  neither raise nor resolve problems until the next successful fetch. **Certificate data for {#NAME} is unavailable**
+  reports the gap once it lasts longer than `{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE}`.
 - **Slow endpoints and the item timeout.** The item prototypes set no timeout of their own, so the global timeout
   for Zabbix agent items (default 3 seconds, *Administration → General → Timeouts*) or the proxy's timeout applies.
   Raise it if a health endpoint needs longer than that.

@@ -68,11 +68,14 @@ zabbix_export:
               value_type: FLOAT
               units: days
               preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.x509.not_after.timestamp
                 - type: JAVASCRIPT
                   parameters:
                     - 'return Math.round((value - Date.now() / 1000) / 86400 * 10) / 10;'
               master_item:
-                key: 'pushit.webcheck.certificate.not_after[{#NAME}]'
+                key: 'web.certificate.get["{#URL}#{#NAME}"]'
               trigger_prototypes:
                 - uuid: d48d334e56e34d33a43d2d95d82d4200
                   expression: |
