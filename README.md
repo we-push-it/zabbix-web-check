@@ -42,7 +42,8 @@ to check as a public one.
   run and deleted 7 days later; put it back before then and they return with their history.
 - 📅 **Three-stage certificate alerts.** WARNING, AVERAGE and HIGH thresholds in days, chosen per endpoint.
 - ⏳ **Grace periods.** An endpoint that stops giving usable answers becomes a problem only after a configurable grace
-  period; a wrong value is reported immediately. An unreachable agent is reported as WARNING, not as a failed check.
+  period; a wrong value is reported immediately. An unreachable agent is reported as WARNING (INFO for certificate
+  checks), not as a failed check.
 - 🎚️ **Tunable with macros.** Intervals and grace periods are user macros you can override per host.
 
 ## 🧭 How it works
@@ -104,13 +105,14 @@ Step by step:
    [Tips and gotchas](#-tips-and-gotchas).
 3. **Raw items.** Each entry gets one Zabbix agent item that talks to the endpoint: `web.page.get["{#URL}#{#NAME}"]`
    for HTTP entries, `web.certificate.get["{#URL}#{#NAME}"]` for certificate entries. The fragment `#{#NAME}` is never
-   sent to the endpoint; it only keeps the item keys unique, so several entries can check the same URL.
+   sent to the endpoint. It keeps the item keys unique, so several entries can check the same URL, and it is part of
+   the key that `AllowKey` and `DenyKey` rules of the agent are matched against.
 4. **Derived items.** Dependent items extract the interesting part with preprocessing (regular expression and
    JSONPath). Their keys carry the same parameter as the raw item, for example
    `pushit.webcheck.http.status["{#URL}#{#NAME}"]`, so a new URL replaces all items of the entry at once: Zabbix
    never moves an existing dependent item to a new raw item. Two overrides in the HTTP rule make sure that only the
-   dependent item matching the entry's type is created. The certificate rule adds a dependent item that reads the
-   `notAfter` timestamp from the same raw data and turns it into days with JavaScript.
+   dependent items of the checks listed in `{#TYPES}` are created. The certificate rule adds a dependent item that
+   reads the `notAfter` timestamp from the same raw data and turns it into days with JavaScript.
 5. **Triggers.** Trigger prototypes compare the values with your expectations (`{#EXPECT_STATUS}`,
    `{#EXPECT_VALUE}`, `{#CERT_*_DAYS}`) and also raise a problem when no usable value has arrived within the
    grace period.
@@ -131,7 +133,7 @@ From download to the first problem in Zabbix in six steps.
 | Requirement | Why |
 |---|---|
 | Zabbix server 7.4 or later | `template.yaml` is a Zabbix 7.4 export (`zabbix_export.version: '7.4'`); import it into Zabbix 7.4 or a later release. |
-| A Zabbix agent on the monitored host | `http_status` and `json_path` use `web.page.get`, available in the classic Zabbix agent and in Zabbix agent 2. |
+| A Zabbix agent on the monitored host | `http_status` and `json_path` use `web.page.get`, available in the classic Zabbix agent and in Zabbix agent 2. For agents older than 7.0, see **Slow endpoints and the item timeout** in [Tips and gotchas](#-tips-and-gotchas). |
 | Zabbix agent 2 for `certificate` checks | `web.certificate.get` exists in Zabbix agent 2 only. |
 | An agent interface on the host | All collecting items are passive *Zabbix agent* items, so the server or proxy must be able to poll the agent. |
 | A network path from the agent to the endpoints | Requests are made from the agent, not from the Zabbix server or proxy. `localhost` is the monitored host itself. |
@@ -156,10 +158,11 @@ From download to the first problem in Zabbix in six steps.
    in the row of your host, select **HTTP** and **Certificate** and click **Execute now**. Give the server a few
    seconds after saving the macro so that its configuration cache has picked up the new value.
 6. **Check the result.** *Monitoring → Latest data*, filtered by your host, shows **HTTP status app** with the value
-   `200`. **Response app** is listed without a value: it fetches the raw HTTP response but does not store it.
-   If the endpoint answers with a different status code, or
-   does not answer at all for more than 3 minutes, *Monitoring → Problems* shows **Unexpected status code for app**
-   or **No status code for app** respectively, both with severity HIGH.
+   `200`. **Response app** is listed without a value: it fetches the raw HTTP response but does not store it. If the
+   endpoint answers with a different status code, *Monitoring → Problems* shows **Unexpected status code for app**.
+   If the request fails, for example because nothing listens on the port, **No status code for app** appears: for a
+   new entry with the first failed request, for an entry that has worked before once no status code has arrived for
+   3 minutes. Both problems have severity HIGH.
 
 From here, extend the list with the [configuration examples](#-configuration-examples). Every later change to the
 macro follows the same path: edit the value, then wait for the next discovery run or use **Execute now**.
@@ -187,7 +190,8 @@ are needed.
 
 Fetches the URL every `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` (default `1m`) with the agent item
 [`web.page.get`](https://www.zabbix.com/documentation/current/en/manual/config/items/itemtypes/zabbix_agent) and
-compares the status code from the first line of the response. The body is not evaluated.
+compares the status code of the final response; interim responses such as `103 Early Hints` are skipped. The body is
+not evaluated.
 
 | Key | Description |
 |---|---|
@@ -258,8 +262,8 @@ A single service on port 8080 whose health endpoint must answer `200`.
 
 The raw response is fetched every minute. **Unexpected status code for app** fires as soon as a code other than `200`
 arrives. **No status code for app** fires when no code could be read for 3 minutes, for example because the endpoint
-refuses connections. **No data for HTTP status app** fires when nothing arrives at all for 3 minutes, usually because
-the agent is not reachable.
+refuses connections; for a new entry it fires with the first failed request. **No data for HTTP status app** fires
+when nothing arrives at all for 3 minutes, usually because the agent is not reachable.
 
 Any status code works as expectation. An endpoint behind authentication, for example, should answer `401`:
 
@@ -319,8 +323,8 @@ endpoints must answer without authentication.
 
 **Unexpected JSON value for shop-api** fires as soon as the selected value differs from `UP`. **No JSON value for
 shop-api** fires when no value could be read for 3 minutes, for example because the service is down, the body is not
-JSON or the path does not match. **No data for JSON path shop-api** fires when nothing arrives at all for 3 minutes,
-usually because the agent is not reachable.
+JSON or the path does not match; for a new entry it fires with the first poll that yields no value. **No data for JSON
+path shop-api** fires when nothing arrives at all for 3 minutes, usually because the agent is not reachable.
 
 ### 3. Certificate expiry with three thresholds
 
@@ -484,10 +488,12 @@ Two rules follow from this:
   dependent items, which keep the Zabbix default history of 31d, so no such rule applies to them.
 
 An agent that cannot be reached sends neither responses nor errors. The HTTP checks of the host then raise only their
-WARNING **No data for ...** triggers, one per check, after the grace period. **Unexpected status code**, **Unexpected
-JSON value**, **No status code** and **No JSON value** keep their state until data arrives again. If no successful
-request lies within the grace period, as for a new entry or after an agent outage longer than the grace period, the
-first failed request raises **No status code** or **No JSON value** right away.
+WARNING **No data for ...** triggers, one per check, after the grace period. A host that is down looks the same to
+Zabbix, so services running on it are then reported only as WARNING as well; monitor the availability of such hosts with
+the severity you need, for example with the agent availability trigger of the host's OS template or with an ICMP ping
+check. **Unexpected status code**, **Unexpected JSON value**, **No status code** and **No JSON value** keep their state
+until data arrives again. If no successful request lies within the grace period, as for a new entry or after an agent
+outage longer than the grace period, the first failed request raises **No status code** or **No JSON value** right away.
 
 To get only the agent problem in that case, make the trigger prototypes **No data for HTTP status {#NAME}** and
 **No data for JSON path {#NAME}** depend on the agent availability trigger of the host's OS template, for example
@@ -532,8 +538,9 @@ with overrides, so each HTTP entry ends up with the raw item plus one dependent 
 **Response {#NAME}** fetches the raw response (status line, headers and body) but does not store it. Unlike agent 2, the
 classic Zabbix agent can put further header blocks in front of it: those of interim responses such as `103 Early Hints`,
 and the reply of a proxy to `CONNECT` when `https_proxy` is set in the agent's environment. **HTTP status {#NAME}**
-skips every header block that is directly followed by another status line and extracts the three-digit status code of
-the final response with one *Regular expression* preprocessing step, output `\1` and this pattern:
+has two preprocessing steps: a *Check for not supported value* step (see below), then a *Regular expression* step
+with the output `\1` and the pattern below, which skips every header block that is directly followed by another
+status line and extracts the three-digit status code of the final response.
 
 ```text
 \A(?:HTTP/[^\n]*\n(?:[^\r\n][^\n]*\n)*\r?\n(?=HTTP/))*HTTP/[0-9.]+[ \t]+([0-9]{3})(?:[ \t]|\r?\n|$)
@@ -550,9 +557,10 @@ times out or the answer is not HTTP, it reports an error and **Response {#NAME}*
 for not supported value* step in front of the regular expression turns that error into `0`, and *Custom on fail* on
 the regular expression does the same for a response without a valid status line. **HTTP status {#NAME}** therefore
 stays supported and gets a value on every poll that reaches the agent, but it does not keep the reason for a `0`. A
-failed request shows its error on **Response {#NAME}**. For a response without a valid status line, run the key by
-hand as in the tip **Test a check by hand** and paste the output into *Test* on **HTTP status {#NAME}**, which shows
-the result of every preprocessing step.
+failed request shows its error on **Response {#NAME}**. For a response without a valid status line, get the raw value
+as in the tip **Test a check by hand** and paste it into *Test* on **HTTP status {#NAME}**, which shows the result of
+every preprocessing step. Paste only the value: the output of `zabbix_get`, or the output of `-t` without the key, the
+`[s|` or `[t|` in front and the `]` at the end.
 
 </details>
 
@@ -564,9 +572,10 @@ the result of every preprocessing step.
 | Response {#NAME} | `web.page.get["{#URL}#{#NAME}"]` | Zabbix agent | Text | `{$PUSHIT.WEBCHECK.HTTP.INTERVAL}` | none |
 | JSON path {#NAME} | `pushit.webcheck.http.json_path["{#URL}#{#NAME}"]` | Dependent on Response {#NAME} | Text | with the master item | 31d (Zabbix default) |
 
-**Response {#NAME}** is the same raw item as for `http_status`. **JSON path {#NAME}** has two preprocessing steps: a
-*Regular expression* step with the output `\1` and the pattern below drops all header blocks and anything in front of
-the first `{` or `[` of the body, such as a byte order mark, then a *JSONPath* step applies `{#JSON_PATH}`.
+**Response {#NAME}** is the same raw item as for `http_status`. **JSON path {#NAME}** has three preprocessing steps: a
+*Check for not supported value* step (see below), a *Regular expression* step with the output `\1` and the pattern
+below, which drops all header blocks and anything in front of the first `{` or `[` of the body, such as a byte order
+mark, then a *JSONPath* step that applies `{#JSON_PATH}`.
 
 ```text
 \A(?:HTTP/[^\n]*\n(?:[^\r\n][^\n]*\n)*\r?\n(?=HTTP/))*HTTP/[^\n]*\n(?:[^\r\n][^\n]*\n)*\r?\n[^{\[]*([\s\S]*)
@@ -582,7 +591,8 @@ the first `{` or `[` of the body, such as a byte order mark, then a *JSONPath* s
 expression and *Custom on fail* on the *Regular expression* and *JSONPath* steps store it instead of an error when the
 agent cannot fetch the URL, the response has no body, the body is not JSON or `{#JSON_PATH}` matches nothing. As for
 `http_status`, the reason is not kept: a failed request shows its error on **Response {#NAME}**, and for the other
-cases *Test* on **JSON path {#NAME}** with the output of the tip **Test a check by hand** shows which step fails.
+cases *Test* on **JSON path {#NAME}** with the raw value from the tip **Test a check by hand**, pasted the same way,
+shows which step fails.
 
 </details>
 
@@ -594,13 +604,14 @@ cases *Test* on **JSON path {#NAME}** with the output of the tip **Test a check 
 | Certificate data {#NAME} | `web.certificate.get["{#URL}#{#NAME}"]` | Zabbix agent (agent 2) | Text | `{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}` | `{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}` |
 | Certificate expiration {#NAME} | `pushit.webcheck.certificate.not_after["{#URL}#{#NAME}"]` | Dependent on Certificate data {#NAME} | Numeric (unsigned), unit `unixtime` | with the master item | 31d (Zabbix default) |
 | Certificate validity {#NAME} | `pushit.webcheck.certificate.is_valid["{#URL}#{#NAME}"]` | Dependent on Certificate data {#NAME} | Text | with the master item | 31d (Zabbix default) |
-| Days until certificate expires ({#NAME}) | `pushit.webcheck.certificate.days_until_expiration["{#URL}#{#NAME}"]` | Dependent on Certificate data {#NAME} | Numeric (float), unit `days` | with the master item | 31d (Zabbix default) |
+| Days until certificate expires ({#NAME}) | `pushit.webcheck.certificate.days_until_expiration["{#URL}#{#NAME}"]` | Dependent on Certificate data {#NAME} | Numeric (float), unit `!days` | with the master item | 31d (Zabbix default) |
 
 **Certificate data {#NAME}** holds the raw certificate JSON. **Certificate expiration {#NAME}** takes
 `$.x509.not_after.timestamp` from it (the *notAfter* date as a Unix timestamp), **Certificate validity {#NAME}**
 takes `$.result.value` (`valid`, `invalid` or `valid-but-self-signed`), and **Days until certificate expires
 ({#NAME})** takes the same `$.x509.not_after.timestamp` and turns it into the remaining days, rounded to one decimal,
 with a second, *JavaScript* preprocessing step: `return Math.round((value - Date.now() / 1000) / 86400 * 10) / 10;`.
+The `!` in its unit stops Zabbix from showing 1000 days or more with a prefix, such as `1.1 Kdays` for 1100 days.
 
 | Trigger | Severity | Condition |
 |---|---|---|
@@ -628,11 +639,15 @@ in problem state.
   7 days: **No data for ...** fires, failures of the new URL are not reported and certificate values stop changing.
   So import the template, click *Execute now* on both rules of every host, check that they are not *Not supported*,
   and only then change URLs. To repair an entry that got caught, delete the disabled **Response {#NAME}** or
-  **Certificate data {#NAME}** item with the old URL and click *Execute now*.
-- **Plain requests from the agent.** `web.page.get` and `web.certificate.get` send unauthenticated requests without
-  custom headers or body, so point them at endpoints that answer anonymously. To verify that a protected endpoint is up,
-  use `http_status` with `{#EXPECT_STATUS}` `"401"`. The requests originate on the monitored host: firewalls between the
-  agent and the service matter, firewalls between the Zabbix server and the service do not.
+  **Certificate data {#NAME}** item with the old URL and click *Execute now*. Entries that shared a URL in v0.2.x can
+  get caught the same way later: after the update their checks may still hang on the raw item of the last of them in
+  the macro, and once that entry is removed, renamed or gets a new URL, the others report **No data for ...**. Repair
+  them the same way.
+- **Plain requests from the agent.** `web.page.get` sends a plain `GET` request without custom headers or body, and
+  without credentials unless the URL contains them (see **Keep credentials out of `{#URL}`**), so point HTTP checks at
+  endpoints that answer anonymously. To verify that a protected endpoint is up, use `http_status` with
+  `{#EXPECT_STATUS}` `"401"`. The requests, and the TLS connections of certificate checks, originate on the monitored
+  host: firewalls between the agent and the service matter, firewalls between the Zabbix server and the service do not.
 - **Certificate checks need `https` and Zabbix agent 2.** For obvious reasons, `web.certificate.get` accepts only the
   `https` scheme. For less obvious reasons it exists only in agent 2. On a host with the classic agent,
   **Certificate data {#NAME}** becomes *Not supported* and an INFO-level problem will be triggered after 30 minutes.
@@ -648,11 +663,12 @@ in problem state.
   the entry back and the same items return with their history. To pause a check instead, see the next tip.
 - **Pausing a check.** Pause a single check by disabling its triggers on the host or, for an HTTP check, its item
   **HTTP status {#NAME}** or **JSON path {#NAME}**. Pause a whole host with a maintenance period. Never disable the
-  raw item **Response {#NAME}** or **Certificate data {#NAME}** on its own: an HTTP check then raises a problem after
-  the grace period although the endpoint is fine, and a certificate check silently freezes: validity and days keep
-  their last values and its triggers neither raise nor resolve problems, because its nodata trigger watches the
-  disabled item itself. Disabling does not close an open problem: it disappears from *Problems* but stays open until
-  you enable the trigger or item again and the check recovers.
+  raw item **Response {#NAME}** or **Certificate data {#NAME}** on its own: an HTTP check then raises
+  **No data for HTTP status {#NAME}** or **No data for JSON path {#NAME}** (WARNING) after the grace period although
+  the endpoint is fine, and a certificate check silently freezes: validity and days keep their last values and its
+  triggers neither raise nor resolve problems, because its nodata trigger watches the disabled item itself. Disabling
+  does not close an open problem: it disappears from *Problems* but stays open until you enable the trigger or item
+  again and the check recovers.
 - **Raw items disabled by hand outlive their entry.** Discovery never deletes a raw item that was disabled by hand: it
   stays on the host when its entry is removed, renamed or given a new URL, and a later entry with the same raw item key
   takes it over, still disabled. Enable the item again before you do that, or delete it afterwards.
@@ -696,13 +712,26 @@ in problem state.
   reports the gap once it lasts longer than `{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE}`.
 - **Slow endpoints and the item timeout.** The item prototypes set no timeout of their own, so the global timeout
   for Zabbix agent items (default 3 seconds, *Administration → General → Timeouts*) or the proxy's timeout applies.
-  Raise it if a health endpoint needs longer than that.
-- **Test a check by hand.** Run the item key on the monitored host with the agent binary, for example
-  `zabbix_agent2 -t 'web.page.get["http://localhost:8080/health"]'` or
-  `zabbix_agent2 -t 'web.certificate.get["https://www.example.com"]'` (`zabbix_agentd -t ...` for the classic
-  agent), or from the server with `zabbix_get -s <agent address> -k 'web.page.get["http://localhost:8080/health"]'`.
-  The output is the raw value the dependent items work with. **Response {#NAME}** does not store it, so this is the
-  way to look at a raw HTTP response.
+  Raise it if a health endpoint needs longer than that. Agents older than 7.0 ignore this timeout and give up on a
+  request only after their own `Timeout` setting. If that is longer than the item timeout, the server stops waiting
+  first and the check gets no value at all: an endpoint that accepts the connection but never answers then raises only
+  **No data for ...** (WARNING) instead of **No status code** or **No JSON value**. On such agents, keep `Timeout`
+  no higher than the item timeout.
+- **Agents that restrict item keys.** The keys of the raw items end in `#{#NAME}`, for example
+  `web.page.get["http://localhost:8080/health#app"]`, and `AllowKey` and `DenyKey` rules in the agent configuration
+  are matched against the whole key. A pattern that ends in `*`, such as `web.page.get[http://localhost:8080/*]`,
+  covers that; an exact pattern such as `web.page.get[http://localhost:8080/health]` does not, and the item becomes
+  *Not supported* with `Unsupported item key.` (classic agent) or `Unknown metric web.page.get` (agent 2). An `Alias`
+  for a raw item has to use the complete key as well.
+- **Test a check by hand.** Copy the key of **Response {#NAME}** or **Certificate data {#NAME}** and run it on the
+  monitored host with the agent binary, for example
+  `zabbix_agent2 -t 'web.page.get["http://localhost:8080/health#app"]'` or
+  `zabbix_agent2 -t 'web.certificate.get["https://www.example.com#www-cert"]'` (`zabbix_agentd -t ...` for the
+  classic agent), or from the server with
+  `zabbix_get -s <agent address> -k 'web.page.get["http://localhost:8080/health#app"]'`. With the complete key, the
+  test is subject to the same `AllowKey` and `DenyKey` rules as the item. `zabbix_get` prints the raw value the
+  dependent items work with; `-t` prints the key followed by the value in `[s|...]` (agent 2) or `[t|...]` (classic
+  agent). **Response {#NAME}** does not store the value, so this is the way to look at a raw HTTP response.
 - **Redirects are not followed.** For a URL that redirects (`http` to `https`, `/` to `/login`, a missing trailing
   slash), both agents return the redirect itself: `http_status` gets its status such as `301` or `302`, and `json_path`
   finds no JSON. Use the final URL, or expect the redirect status in `{#EXPECT_STATUS}`.
@@ -711,9 +740,9 @@ in problem state.
   `certificate` entry for that, as in [example 4](#4-a-realistic-host-several-services-all-three-types).
 - **Keep credentials out of `{#URL}`.** Both agents send the user name and password of a URL such as
   `http://user:secret@localhost:8080/health` as Basic authentication, but the URL also ends up in clear text in the
-  keys of all items of the entry, in all of its trigger expressions, in problem descriptions and in the Zabbix server
-  log. Storing `{$PUSHIT.WEBCHECK.CONFIG}` as a secret macro does not hide it. Point the checks at endpoints that
-  answer without authentication, or expect `401` from a protected one.
+  keys of all items of the entry, in all of its trigger expressions, for certificate entries in the description of the
+  HIGH expiry problem, and in the Zabbix server log. Storing `{$PUSHIT.WEBCHECK.CONFIG}` as a secret macro does not
+  hide it. Point the checks at endpoints that answer without authentication, or expect `401` from a protected one.
 - **Check the discovery rules after every change.** That means every change to the macro and every import of a new
   version of this template: open *Discovery* in the row of the host under *Data collection → Hosts* and look at the
   *Status* and *Info* columns. A mistake that the rules find turns both of them *Not supported*, see **Invalid entries
@@ -736,6 +765,10 @@ To verify a change functionally, import the file into a test Zabbix (importing a
 template), link it to a host with an agent, set a small `{$PUSHIT.WEBCHECK.CONFIG}` and run **Execute now** on both
 discovery rules. Keep the `uuid` values in the file: they tie every object to its counterpart in an existing
 installation, so re-importing updates instead of duplicating.
+
+The description of `{$PUSHIT.WEBCHECK.CONFIG}` links the README of a release tag, so that an installed template
+points to the documentation that matches it. Before you tag a new release, change the tag in that link to the new
+version.
 
 ## 📄 License
 
