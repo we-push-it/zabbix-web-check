@@ -5,7 +5,9 @@ zabbix_export:
     - uuid: f589289cf25945c7ad8c6ef054b07c5e
       template: 'PUSH IT Webcheck'
       name: 'PUSH IT Webcheck'
-      description: 'This template provides checks for one or more health endpoints running on this machine.'
+      description: >-
+        Checks HTTP status codes, JSON values and TLS certificates of the endpoints listed in {$PUSHIT.WEBCHECK.CONFIG}.
+        All requests are made by the Zabbix agent of the host.
       groups:
         - name: Templates
       discovery_rules:
@@ -214,7 +216,7 @@ zabbix_export:
               type: DEPENDENT
               key: 'pushit.webcheck.certificate.days_until_expiration["{#URL}#{#NAME}"]'
               value_type: FLOAT
-              units: days
+              units: '!days'
               preprocessing:
                 - type: JSONPATH
                   parameters:
@@ -451,8 +453,9 @@ zabbix_export:
                   priority: HIGH
                   description: >-
                     The status code of the monitored service does not match the expected status code {#EXPECT_STATUS}.
-                    The problem stays open until the service answers with {#EXPECT_STATUS} again. If no status code
-                    arrives for {$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}, No status code for {#NAME} takes over.
+                    The problem stays open until the service answers with {#EXPECT_STATUS} again. If only failed
+                    requests (0) arrive for {$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}, No status code for {#NAME}
+                    takes over.
                 - uuid: 74b6bc13eb3a435da550919fdf3cdc72
                   expression: >-
                     last(/PUSH IT Webcheck/pushit.webcheck.http.status["{#URL}#{#NAME}"])=0
@@ -473,7 +476,8 @@ zabbix_export:
                   description: >-
                     No value at all, not even 0, has arrived for HTTP status {#NAME} for more than
                     {$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}. The check is not running, usually because the Zabbix
-                    agent is not reachable. This says nothing about the monitored service.
+                    agent or the whole host is not reachable, or because Response {#NAME} is disabled. Whether the
+                    monitored service is up is unknown; if it runs on the same host, it may be down as well.
             - uuid: 4517fccf57e3473a80e786ada27dac6b
               name: 'JSON path {#NAME}'
               type: DEPENDENT
@@ -516,7 +520,7 @@ zabbix_export:
                   description: >-
                     The value at "{#JSON_PATH}" in the response of the monitored service does not match the expected
                     value of "{#EXPECT_VALUE}". The problem stays open until the service answers with that value again.
-                    If no value can be read for {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}, No JSON value for
+                    If only [no value] arrives for {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}, No JSON value for
                     {#NAME} takes over.
                 - uuid: e704b580f33040b8bb0183abf564358f
                   expression: >-
@@ -539,7 +543,8 @@ zabbix_export:
                   description: >-
                     No value at all, not even [no value], has arrived for JSON path {#NAME} for more than
                     {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}. The check is not running, usually because the Zabbix
-                    agent is not reachable. This says nothing about the monitored service.
+                    agent or the whole host is not reachable, or because Response {#NAME} is disabled. Whether the
+                    monitored service is up is unknown; if it runs on the same host, it may be down as well.
           parameters:
             - name: config
               value: '{$PUSHIT.WEBCHECK.CONFIG}'
@@ -604,6 +609,6 @@ zabbix_export:
         - macro: '{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}'
           value: 3m
           description: >-
-            Time expression for how long an absent http response (and thus JSON-path-selected value) is tolerated before
-            a problem is raised. Must be larger than PUSHIT.WEBCHECK.HTTP.INTERVAL, otherwise it provides no tolerance
-            and can raise false no-data problems.
+            Time expression for how long a missing JSON value (no response, a body that is not JSON or nothing at the
+            path) is tolerated before a problem is raised. Must be larger than PUSHIT.WEBCHECK.HTTP.INTERVAL,
+            otherwise it provides no tolerance and can raise false no-data problems.
