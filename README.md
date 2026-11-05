@@ -165,8 +165,8 @@ whose keys are LLD macros. Three keys are common to all checks; the value of `{#
 are needed.
 
 > **Write values as JSON strings** like the examples do: `"200"`, `"30"`, `"UP"`. Status codes, day thresholds and
-> expected values may also be plain JSON numbers, expected values also `true` or `false`. Both discovery rules check
-> every entry before they create anything and stop with an error that names the entry when they find a mistake.
+> expected values may also be plain JSON numbers, expected values also `true`, `false` or `null`. Both discovery rules
+> check every entry before they create anything and stop with an error that names the entry when they find a mistake.
 > [Tips and gotchas](#-tips-and-gotchas) lists what they check and what only Zabbix notices later.
 
 ### Common keys
@@ -195,8 +195,8 @@ type; add `http_status` to `{#TYPES}` if you need both.
 
 | Key | Description |
 |---|---|
-| `{#JSON_PATH}` | [Zabbix JSONPath] expression selecting the value, for example `$.status` or `$.components.db.status`. Use a definite path: an expression that returns a list yields a JSON array as text, which is hard to compare. Strings inside the expression need single quotes, for example `$['app-version']` or `$.checks[?(@.name=='db')].status.first()`; with double quotes, discovery cannot create the check. |
-| `{#EXPECT_VALUE}` | Expected value. JSON strings arrive without quotes (`UP`), booleans and numbers as text (`true`, `200`). Values that look like numbers are compared numerically, Zabbix suffixes included, so `1.10` equals `1.1` and `1K` equals `1024`; everything else is compared as a string. A user macro in the value, such as `{$APP.VERSION}`, is resolved before the comparison. A mismatch raises **Unexpected JSON value for {#NAME}** (HIGH). |
+| `{#JSON_PATH}` | [Zabbix JSONPath] expression selecting the value, for example `$.status` or `$.components.db.status`. Use a definite path: an expression that returns a list yields a JSON array as text, which is hard to compare. Strings inside the expression need single quotes, for example `$['app-version']` or `$.checks[?(@.name=='db')].status.first()`; with double quotes, discovery cannot create the check. Backslashes work inside such strings, for example in a regular expression; in the JSON of the macro each one is written as `\\`, as in `"$.checks[?(@.name =~ '^db\\d$')].status.first()"`. |
+| `{#EXPECT_VALUE}` | Expected value. JSON strings arrive without quotes (`UP`), booleans, numbers and `null` as text (`true`, `200`, `null`). Values that look like numbers are compared numerically, Zabbix suffixes included, so `1.10` equals `1.1` and `1K` equals `1024`; everything else is compared as a string. A user macro in the value, such as `{$APP.VERSION}`, is resolved before the comparison. A mismatch raises **Unexpected JSON value for {#NAME}** (HIGH). |
 
 ### `certificate`
 
@@ -642,14 +642,20 @@ in problem state.
 - **Invalid entries stop discovery as well.** Both rules check every entry before they create anything: unknown keys
   such as the old `{#TYPE}`, unknown check types such as `http-status`, missing values, status codes outside 100 to
   599, day thresholds that are not plain numbers such as `"30d"`, expected values with leading or trailing spaces,
-  JSON paths with a syntax error or with `"` or `\`, and a `{#NAME}` used twice within the HTTP or within the
-  certificate entries. Each of these turns both rules *Not supported* with an error that names the entry. For example,
-  `Entry 1 (app): {#EXPECT_STATUS} must be a status code from 100 to 599 for http_status, got "200 "`. Existing items
-  stay as they are until the macro is fixed. An action on internal events for low-level discovery rules in
-  *Not supported* state can alert on this.
+  JSON paths with a syntax error or with `"`, and a `{#NAME}` used twice within the HTTP or within the certificate
+  entries. Each of these turns both rules *Not supported* with an error that names the entry. For example,
+  `Entry 1 (app): {#EXPECT_STATUS} must be a status code from 100 to 599 or a user macro for http_status, got "200 "`.
+  Existing items stay as they are until the macro is fixed. An action on internal events for low-level discovery rules
+  in *Not supported* state can alert on this.
 - **Errors in JSONPath filters do not stop discovery.** The rules check a JSON path only up to its first filter
   expression such as `[?(@.status == 'UP')]`. Zabbix checks the rest when it creates the item and reports an error only
   in the *Info* column of the **HTTP** rule, which stays normal. The entry is left without a working JSON path check.
+- **Values with user macros are not checked.** Status codes, day thresholds, expected values and JSON paths may
+  contain user macros, for example `"{#EXPECT_STATUS}":"{$APP.STATUS}"` or `"{#JSON_PATH}":"$.{$APP.KEY}"`. Zabbix
+  resolves them only when it evaluates the check, so the rules only make sure that such a value has no spaces at its
+  ends and that a JSON path contains no `"` and starts with `$` or with a macro. A misspelled or undefined macro, or
+  a macro value that does not fit, such as `7d` as a day threshold, leaves the trigger in the *Unknown* state, so it
+  never fires; in a JSON path it raises **No JSON value for {#NAME}** instead.
 - **The macro value is limited to 2048 characters.** Keep the JSON compact and the names and URLs short. Depending
   on URL length, somewhere between a dozen and twenty entries fit into one macro. Count the characters as shown in
   [compact form](#compact-form).

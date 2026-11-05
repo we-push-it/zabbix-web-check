@@ -18,6 +18,7 @@ zabbix_export:
             var keys = ['{#NAME}', '{#URL}', '{#TYPES}', '{#EXPECT_STATUS}', '{#JSON_PATH}', '{#EXPECT_VALUE}',
                     '{#CERT_WARN_DAYS}', '{#CERT_AVG_DAYS}', '{#CERT_HIGH_DAYS}'],
                 checks = ['http_status', 'json_path', 'certificate'],
+                macro = /\{\$[A-Z0-9_.]+(?:: *(?:"(?:[^"\\]|\\"|\\(?!"))*" *|[^ "}][^}]*)?)?\}/,
                 names = {},
                 entries, entry, label;
 
@@ -38,7 +39,16 @@ zabbix_export:
                 return typeof value === 'string' && /\S/.test(value);
             }
 
+            // Zabbix resolves user macros such as {$APP.STATUS}, {$APP.STATUS:ctx} or {$APP.STATUS:"ctx"} after discovery, so
+            // the macro value is unknown here and a value that contains one is only checked for what does not depend on it.
+            function hasMacro(value) {
+                return typeof value === 'string' && macro.test(value);
+            }
+
             function isStatus(value) {
+                if (hasMacro(value)) {
+                    return !/^\s|\s$/.test(value);
+                }
                 return (typeof value === 'string' || typeof value === 'number') && /^[1-5][0-9][0-9]$/.test(String(value));
             }
 
@@ -47,16 +57,24 @@ zabbix_export:
                     indexes = /\.{0,2}\[\s*(?:\*\s*|-?\d+(?:(?:\s*,\s*|\s+)-?\d+)*\s*|(?:-?\d[-\d\s]*)?:[-\d\s]*)\]/g,
                     path = /^\$(?:\.\.?(?:\*|[\w$]+))*(?:(?:\.\.?(?:min|max|avg|length|first|sum)\(\s*\)|~)*$|\.{0,2}\[\s*\?)/;
 
-                return typeof value === 'string' && /^\$[^"\\]+$/.test(value) && !/\s$/.test(value)
-                    && path.test(value.replace(quoted, '.*').replace(indexes, '.*'));
+                if (typeof value !== 'string' || /"|\s$/.test(value)) {
+                    return false;
+                }
+                if (hasMacro(value)) {
+                    return value.charAt(0) === '$' || value.search(macro) === 0;
+                }
+                return /^\$[^"]+$/.test(value) && path.test(value.replace(quoted, '.*').replace(indexes, '.*'));
             }
 
             function isScalar(value) {
                 return (typeof value === 'string' && !/^\s|\s$/.test(value)) || typeof value === 'boolean'
-                    || (typeof value === 'number' && isFinite(value));
+                    || (typeof value === 'number' && isFinite(value)) || value === null;
             }
 
             function isDays(value) {
+                if (hasMacro(value)) {
+                    return !/^\s|\s$/.test(value);
+                }
                 return (typeof value === 'string' || typeof value === 'number') && /^-?[0-9]+(\.[0-9]+)?$/.test(String(value));
             }
 
@@ -115,17 +133,18 @@ zabbix_export:
                 entry['{#TYPES}'] = types.join(',');
 
                 if (types.indexOf('http_status') !== -1) {
-                    check('{#EXPECT_STATUS}', isStatus, 'a status code from 100 to 599 for http_status');
+                    check('{#EXPECT_STATUS}', isStatus, 'a status code from 100 to 599 or a user macro for http_status');
                 }
                 if (types.indexOf('json_path') !== -1) {
                     check('{#JSON_PATH}', isJsonPath, 'a JSONPath such as $.status or $.components[\'db-main\'].status'
-                        + ' for json_path, without " or \\ and without spaces outside brackets');
-                    check('{#EXPECT_VALUE}', isScalar, 'a string without leading or trailing spaces, a number or a boolean for json_path');
+                        + ' for json_path, without " and without spaces outside brackets');
+                    check('{#EXPECT_VALUE}', isScalar, 'a string without leading or trailing spaces, a number, a boolean or null'
+                        + ' for json_path');
                 }
                 if (types.indexOf('certificate') !== -1) {
-                    check('{#CERT_WARN_DAYS}', isDays, 'a number of days such as "30" for certificate');
-                    check('{#CERT_AVG_DAYS}', isDays, 'a number of days such as "14" for certificate');
-                    check('{#CERT_HIGH_DAYS}', isDays, 'a number of days such as "7" for certificate');
+                    check('{#CERT_WARN_DAYS}', isDays, 'a number of days such as "30" or a user macro for certificate');
+                    check('{#CERT_AVG_DAYS}', isDays, 'a number of days such as "14" or a user macro for certificate');
+                    check('{#CERT_HIGH_DAYS}', isDays, 'a number of days such as "7" or a user macro for certificate');
                 }
 
                 for (j = 0; j < types.length; j++) {
@@ -226,6 +245,7 @@ zabbix_export:
             var keys = ['{#NAME}', '{#URL}', '{#TYPES}', '{#EXPECT_STATUS}', '{#JSON_PATH}', '{#EXPECT_VALUE}',
                     '{#CERT_WARN_DAYS}', '{#CERT_AVG_DAYS}', '{#CERT_HIGH_DAYS}'],
                 checks = ['http_status', 'json_path', 'certificate'],
+                macro = /\{\$[A-Z0-9_.]+(?:: *(?:"(?:[^"\\]|\\"|\\(?!"))*" *|[^ "}][^}]*)?)?\}/,
                 names = {},
                 entries, entry, label;
 
@@ -246,7 +266,16 @@ zabbix_export:
                 return typeof value === 'string' && /\S/.test(value);
             }
 
+            // Zabbix resolves user macros such as {$APP.STATUS}, {$APP.STATUS:ctx} or {$APP.STATUS:"ctx"} after discovery, so
+            // the macro value is unknown here and a value that contains one is only checked for what does not depend on it.
+            function hasMacro(value) {
+                return typeof value === 'string' && macro.test(value);
+            }
+
             function isStatus(value) {
+                if (hasMacro(value)) {
+                    return !/^\s|\s$/.test(value);
+                }
                 return (typeof value === 'string' || typeof value === 'number') && /^[1-5][0-9][0-9]$/.test(String(value));
             }
 
@@ -255,16 +284,24 @@ zabbix_export:
                     indexes = /\.{0,2}\[\s*(?:\*\s*|-?\d+(?:(?:\s*,\s*|\s+)-?\d+)*\s*|(?:-?\d[-\d\s]*)?:[-\d\s]*)\]/g,
                     path = /^\$(?:\.\.?(?:\*|[\w$]+))*(?:(?:\.\.?(?:min|max|avg|length|first|sum)\(\s*\)|~)*$|\.{0,2}\[\s*\?)/;
 
-                return typeof value === 'string' && /^\$[^"\\]+$/.test(value) && !/\s$/.test(value)
-                    && path.test(value.replace(quoted, '.*').replace(indexes, '.*'));
+                if (typeof value !== 'string' || /"|\s$/.test(value)) {
+                    return false;
+                }
+                if (hasMacro(value)) {
+                    return value.charAt(0) === '$' || value.search(macro) === 0;
+                }
+                return /^\$[^"]+$/.test(value) && path.test(value.replace(quoted, '.*').replace(indexes, '.*'));
             }
 
             function isScalar(value) {
                 return (typeof value === 'string' && !/^\s|\s$/.test(value)) || typeof value === 'boolean'
-                    || (typeof value === 'number' && isFinite(value));
+                    || (typeof value === 'number' && isFinite(value)) || value === null;
             }
 
             function isDays(value) {
+                if (hasMacro(value)) {
+                    return !/^\s|\s$/.test(value);
+                }
                 return (typeof value === 'string' || typeof value === 'number') && /^-?[0-9]+(\.[0-9]+)?$/.test(String(value));
             }
 
@@ -323,17 +360,18 @@ zabbix_export:
                 entry['{#TYPES}'] = types.join(',');
 
                 if (types.indexOf('http_status') !== -1) {
-                    check('{#EXPECT_STATUS}', isStatus, 'a status code from 100 to 599 for http_status');
+                    check('{#EXPECT_STATUS}', isStatus, 'a status code from 100 to 599 or a user macro for http_status');
                 }
                 if (types.indexOf('json_path') !== -1) {
                     check('{#JSON_PATH}', isJsonPath, 'a JSONPath such as $.status or $.components[\'db-main\'].status'
-                        + ' for json_path, without " or \\ and without spaces outside brackets');
-                    check('{#EXPECT_VALUE}', isScalar, 'a string without leading or trailing spaces, a number or a boolean for json_path');
+                        + ' for json_path, without " and without spaces outside brackets');
+                    check('{#EXPECT_VALUE}', isScalar, 'a string without leading or trailing spaces, a number, a boolean or null'
+                        + ' for json_path');
                 }
                 if (types.indexOf('certificate') !== -1) {
-                    check('{#CERT_WARN_DAYS}', isDays, 'a number of days such as "30" for certificate');
-                    check('{#CERT_AVG_DAYS}', isDays, 'a number of days such as "14" for certificate');
-                    check('{#CERT_HIGH_DAYS}', isDays, 'a number of days such as "7" for certificate');
+                    check('{#CERT_WARN_DAYS}', isDays, 'a number of days such as "30" or a user macro for certificate');
+                    check('{#CERT_AVG_DAYS}', isDays, 'a number of days such as "14" or a user macro for certificate');
+                    check('{#CERT_HIGH_DAYS}', isDays, 'a number of days such as "7" or a user macro for certificate');
                 }
 
                 for (j = 0; j < types.length; j++) {
