@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install yq, yamllint and duk
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends yamllint
+          sudo wget --quiet --output-document /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/download/v4.54.2/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+          curl --silent --show-error --fail --location \
+            https://github.com/svaarala/duktape/releases/download/v2.7.0/duktape-2.7.0.tar.xz | tar -xJ -C "$RUNNER_TEMP"
+          src="$RUNNER_TEMP/duktape-2.7.0"
+          sudo gcc -O2 -std=c99 -o /usr/local/bin/duk -I"$src/src" -I"$src/extras/print-alert" \
+            "$src/src/duktape.c" "$src/extras/print-alert/duk_print_alert.c" "$src/examples/cmdline/duk_cmdline.c" \
+            -DDUK_CMDLINE_PRINTALERT_SUPPORT -lm
+          yq --version
+          echo 'print("duk ok")' | duk /dev/stdin
+
+      - name: Build template.dist.yaml
+        run: make template.dist.yaml
+
+      - name: Lint
+        run: make lint
+
+      - name: Run the discovery script on config.example.json
+        run: make check-js
+
+      - name: Run the discovery script on tests/cases.json
+        run: make test

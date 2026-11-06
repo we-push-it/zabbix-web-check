@@ -1,3 +1,4 @@
 .discovery_script.check.js
+.discovery_script.test.js
 .discovery_script.trimmed.js
 template.dist.yaml
