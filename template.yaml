@@ -273,7 +273,7 @@ zabbix_export:
             - uuid: 924b1fa1897f441388287043b06567f0
               name: 'JSON path (number) {#NAME}'
               type: DEPENDENT
-              key: 'pushit.webcheck.http.json_path_number[{#NAME}]'
+              key: 'pushit.webcheck.http.json_path_number["{#URL}#{#NAME}"]'
               value_type: FLOAT
               discover: NO_DISCOVER
               preprocessing:
@@ -285,11 +285,11 @@ zabbix_export:
                   parameters:
                     - '{#JSON_PATH_NUMBER}'
               master_item:
-                key: 'web.page.get["{#URL}"]'
+                key: 'web.page.get["{#URL}#{#NAME}"]'
               trigger_prototypes:
                 - uuid: 88adb01d02274961bf3dbadf8f7a92d0
                   expression: |
-                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number[{#NAME}],{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE})=1
+                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number["{#URL}#{#NAME}"],{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE})=1
                   name: 'Missing JSON value for {#NAME} (number)'
                   priority: WARNING
                   description: |
@@ -297,7 +297,7 @@ zabbix_export:
                     more than {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}.
                 - uuid: 5fb89ee56ac94b8d9e716ca51dc7f685
                   expression: |
-                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number[{#NAME}])<>{#EXPECT_VALUE_NUMBER}
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number["{#URL}#{#NAME}"])<>{#EXPECT_VALUE_NUMBER}
                   name: 'JSON value for {#NAME} does not match expected value (number)'
                   priority: HIGH
                   discover: NO_DISCOVER
@@ -306,7 +306,7 @@ zabbix_export:
                     expected value "{#EXPECT_VALUE_NUMBER}".
                 - uuid: 0cefa5a1d58446be8ea2762cafdf0b62
                   expression: |
-                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number[{#NAME}])={#EXPECT_VALUE_NUMBER}
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number["{#URL}#{#NAME}"])={#EXPECT_VALUE_NUMBER}
                   name: 'JSON value for {#NAME} matches prohibited value (number)'
                   priority: HIGH
                   discover: NO_DISCOVER
@@ -315,7 +315,7 @@ zabbix_export:
                     value "{#EXPECT_VALUE_NUMBER}".
                 - uuid: f9f4429faf20486d8f574e5a055d5eea
                   expression: |
-                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number[{#NAME}])>={#EXPECT_VALUE_NUMBER}
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number["{#URL}#{#NAME}"])>={#EXPECT_VALUE_NUMBER}
                   name: 'JSON value for {#NAME} is not below expected limit (number)'
                   priority: HIGH
                   discover: NO_DISCOVER
@@ -324,7 +324,7 @@ zabbix_export:
                     {#EXPECT_VALUE_NUMBER}, but is greater than or equal to that limit.
                 - uuid: 2c87fac4270d44e38810fcb6e3698623
                   expression: |
-                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number[{#NAME}])>{#EXPECT_VALUE_NUMBER}
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number["{#URL}#{#NAME}"])>{#EXPECT_VALUE_NUMBER}
                   name: 'JSON value for {#NAME} exceeds expected maximum (number)'
                   priority: HIGH
                   discover: NO_DISCOVER
@@ -333,7 +333,7 @@ zabbix_export:
                     equal to {#EXPECT_VALUE_NUMBER}, but exceeds that limit.
                 - uuid: a0e9315f06b9422d9c26878a52bb4cf0
                   expression: |
-                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number[{#NAME}])<={#EXPECT_VALUE_NUMBER}
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number["{#URL}#{#NAME}"])<={#EXPECT_VALUE_NUMBER}
                   name: 'JSON value for {#NAME} is not above expected limit (number)'
                   priority: HIGH
                   discover: NO_DISCOVER
@@ -342,7 +342,7 @@ zabbix_export:
                     {#EXPECT_VALUE_NUMBER}, but is less than or equal to that limit.
                 - uuid: 1dc538495f45492e9abf7069061fbf03
                   expression: |
-                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number[{#NAME}])<{#EXPECT_VALUE_NUMBER}
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number["{#URL}#{#NAME}"])<{#EXPECT_VALUE_NUMBER}
                   name: 'JSON value for {#NAME} is below expected minimum (number)'
                   priority: HIGH
                   discover: NO_DISCOVER
@@ -487,31 +487,31 @@ zabbix_export:
           item_prototypes:
             - uuid: 252b7ac30a05405c91546f13199c172e
               name: 'HTTP performance {#NAME}'
-              key: 'web.page.perf["{#URL}"]'
+              key: 'web.page.perf["{#URL}#{#NAME}"]'
               delay: '{$PUSHIT.WEBCHECK.HTTP.INTERVAL}'
               value_type: FLOAT
               timeout: '{#PERF_TIMEOUT}'
               trigger_prototypes:
                 - uuid: 8fda601e87fa4a52ae7c1ec2e8085129
-                  expression: nodata(/PUSH IT Webcheck/web.page.perf["{#URL}"],{#PERF_NODATA})=1
+                  expression: nodata(/PUSH IT Webcheck/web.page.perf["{#URL}#{#NAME}"],{#PERF_NODATA})=1
                   name: 'Missing HTTP performance data for {#NAME}'
                   priority: WARNING
                   description: |
                     Performance data for {#NAME} was unavailable for {#PERF_NODATA} or more.
                 - uuid: c014d2e41ba740ce83092e0cfc5fd084
-                  expression: last(/PUSH IT Webcheck/web.page.perf["{#URL}"])>{#PERF_WARN}
+                  expression: last(/PUSH IT Webcheck/web.page.perf["{#URL}#{#NAME}"])>{#PERF_WARN}
                   name: 'Performance of {#NAME} exceeds WARN limit'
                   priority: WARNING
                 - uuid: e8fd416c7da241a3b2695a7494fd1820
-                  expression: last(/PUSH IT Webcheck/web.page.perf["{#URL}"])>{#PERF_AVG}
+                  expression: last(/PUSH IT Webcheck/web.page.perf["{#URL}#{#NAME}"])>{#PERF_AVG}
                   name: 'Performance of {#NAME} exceeds AVERAGE limit'
                   priority: AVERAGE
                 - uuid: 3353afe283c0411181e96c7326ec4786
-                  expression: last(/PUSH IT Webcheck/web.page.perf["{#URL}"])>{#PERF_HIGH}
+                  expression: last(/PUSH IT Webcheck/web.page.perf["{#URL}#{#NAME}"])>{#PERF_HIGH}
                   name: 'Performance of {#NAME} exceeds HIGH limit'
                   priority: HIGH
                 - uuid: 2d02dc6a916d4fc2befc5daaa12ad680
-                  expression: last(/PUSH IT Webcheck/web.page.perf["{#URL}"])>{#PERF_DISASTER}
+                  expression: last(/PUSH IT Webcheck/web.page.perf["{#URL}#{#NAME}"])>{#PERF_DISASTER}
                   name: 'Performance of {#NAME} exceeds DISASTER limit'
                   priority: DISASTER
           parameters:
