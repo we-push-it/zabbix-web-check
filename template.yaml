@@ -323,69 +323,181 @@ zabbix_export:
                     - '{#JSON_PATH_NUMBER}'
               master_item:
                 key: 'web.page.get["{#URL}#{#NAME}"]'
+            - uuid: ffe03c9c6eea48e5a1fc2668579a4e57
+              name: 'JSON path (number) readable {#NAME}'
+              type: DEPENDENT
+              key: 'pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"]'
+              discover: NO_DISCOVER
+              description: >-
+                1 if a number could be read at "{#JSON_PATH_NUMBER}" in the last response of the monitored service, 0 if
+                the request failed, the body is not JSON, the path does not exist or the value there is not a number.
+                JSON path (number) {#NAME} is not supported in that case. The triggers of the number check use this item
+                to tell a failing service (0) from a check that does not run at all (no value).
+              preprocessing:
+                - type: CHECK_NOT_SUPPORTED
+                  parameters:
+                    - '-1'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '[no value]'
+                - type: REGEX
+                  parameters:
+                    - '\A(?:HTTP/[^\n]*\n(?:[^\r\n][^\n]*\n)*\r?\n(?=HTTP/))*HTTP/[^\n]*\n(?:[^\r\n][^\n]*\n)*\r?\n[^{\[]*([\s\S]*)'
+                    - \1
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '[no value]'
+                - type: JSONPATH
+                  parameters:
+                    - '{#JSON_PATH_NUMBER}'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '[no value]'
+                - type: REGEX
+                  parameters:
+                    - '\A *("?)[+-]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?\1 *[\r\n]*\z'
+                    - '1'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: 'web.page.get["{#URL}#{#NAME}"]'
               trigger_prototypes:
+                - uuid: 792d81bcdbb24e16a441aa8c8cd9dc22
+                  expression: >-
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=0
+                    and
+                    count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],
+                    {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","0")=0
+                  name: 'No JSON value for {#NAME} (number)'
+                  priority: HIGH
+                  description: >-
+                    No number could be read at "{#JSON_PATH_NUMBER}" in the responses of the monitored service within
+                    the last {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}: the service did not answer, the body is not
+                    JSON, the path does not exist or the value there is not a number. JSON path (number) readable
+                    {#NAME} is 0 in that case.
                 - uuid: 88adb01d02274961bf3dbadf8f7a92d0
-                  expression: |
-                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number["{#URL}#{#NAME}"],{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE})=1
-                  name: 'Missing JSON value for {#NAME} (number)'
+                  expression: >-
+                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],
+                    {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE})=1
+                  name: 'No data for JSON path (number) {#NAME}'
                   priority: WARNING
-                  description: |
-                    The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service was not available for
-                    more than {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}.
-                - uuid: 5fb89ee56ac94b8d9e716ca51dc7f685
-                  expression: |
-                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number["{#URL}#{#NAME}"])<>{#EXPECT_VALUE_NUMBER}
-                  name: 'JSON value for {#NAME} does not match expected value (number)'
-                  priority: HIGH
-                  discover: NO_DISCOVER
-                  description: |
-                    The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service does not match the
-                    expected value "{#EXPECT_VALUE_NUMBER}".
-                - uuid: 0cefa5a1d58446be8ea2762cafdf0b62
-                  expression: |
-                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number["{#URL}#{#NAME}"])={#EXPECT_VALUE_NUMBER}
-                  name: 'JSON value for {#NAME} matches prohibited value (number)'
-                  priority: HIGH
-                  discover: NO_DISCOVER
-                  description: |
-                    The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service matches the prohibited
-                    value "{#EXPECT_VALUE_NUMBER}".
-                - uuid: f9f4429faf20486d8f574e5a055d5eea
-                  expression: |
-                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number["{#URL}#{#NAME}"])>={#EXPECT_VALUE_NUMBER}
-                  name: 'JSON value for {#NAME} is not below expected limit (number)'
-                  priority: HIGH
-                  discover: NO_DISCOVER
-                  description: |
-                    The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service must be less than
-                    {#EXPECT_VALUE_NUMBER}, but is greater than or equal to that limit.
-                - uuid: 2c87fac4270d44e38810fcb6e3698623
-                  expression: |
-                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number["{#URL}#{#NAME}"])>{#EXPECT_VALUE_NUMBER}
-                  name: 'JSON value for {#NAME} exceeds expected maximum (number)'
-                  priority: HIGH
-                  discover: NO_DISCOVER
-                  description: |
-                    The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service must be less than or
-                    equal to {#EXPECT_VALUE_NUMBER}, but exceeds that limit.
-                - uuid: a0e9315f06b9422d9c26878a52bb4cf0
-                  expression: |
-                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number["{#URL}#{#NAME}"])<={#EXPECT_VALUE_NUMBER}
-                  name: 'JSON value for {#NAME} is not above expected limit (number)'
-                  priority: HIGH
-                  discover: NO_DISCOVER
-                  description: |
-                    The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service must be greater than
-                    {#EXPECT_VALUE_NUMBER}, but is less than or equal to that limit.
-                - uuid: 1dc538495f45492e9abf7069061fbf03
-                  expression: |
-                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number["{#URL}#{#NAME}"])<{#EXPECT_VALUE_NUMBER}
-                  name: 'JSON value for {#NAME} is below expected minimum (number)'
-                  priority: HIGH
-                  discover: NO_DISCOVER
-                  description: |
-                    The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service must be greater than or
-                    equal to {#EXPECT_VALUE_NUMBER}, but is below that limit.
+                  description: >-
+                    No value at all, not even 0, has arrived for JSON path (number) readable {#NAME} for more than
+                    {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}. The check is not running, usually because the Zabbix
+                    agent or the whole host is not reachable, or because Response {#NAME} is disabled. Whether the
+                    monitored service is up is unknown; if it runs on the same host, it may be down as well.
+          trigger_prototypes:
+            - uuid: 5fb89ee56ac94b8d9e716ca51dc7f685
+              expression: |
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number["{#URL}#{#NAME}"])<>{#EXPECT_VALUE_NUMBER}
+                and
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
+              recovery_mode: RECOVERY_EXPRESSION
+              recovery_expression: >-
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
+                or
+                count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],
+                {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","0")=0
+              name: 'JSON value for {#NAME} does not match expected value (number)'
+              priority: HIGH
+              discover: NO_DISCOVER
+              description: >-
+                The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service does not match the expected
+                value {#EXPECT_VALUE_NUMBER}. The problem stays open until the service answers with a number that
+                satisfies the comparison again. If no number can be read for
+                {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}, No JSON value for {#NAME} (number) takes over.
+            - uuid: 0cefa5a1d58446be8ea2762cafdf0b62
+              expression: |
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number["{#URL}#{#NAME}"])={#EXPECT_VALUE_NUMBER}
+                and
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
+              recovery_mode: RECOVERY_EXPRESSION
+              recovery_expression: >-
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
+                or
+                count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],
+                {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","0")=0
+              name: 'JSON value for {#NAME} matches prohibited value (number)'
+              priority: HIGH
+              discover: NO_DISCOVER
+              description: >-
+                The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service matches the prohibited value
+                {#EXPECT_VALUE_NUMBER}. The problem stays open until the service answers with a number that satisfies
+                the comparison again. If no number can be read for {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}, No
+                JSON value for {#NAME} (number) takes over.
+            - uuid: f9f4429faf20486d8f574e5a055d5eea
+              expression: |
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number["{#URL}#{#NAME}"])>={#EXPECT_VALUE_NUMBER}
+                and
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
+              recovery_mode: RECOVERY_EXPRESSION
+              recovery_expression: >-
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
+                or
+                count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],
+                {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","0")=0
+              name: 'JSON value for {#NAME} is not below expected limit (number)'
+              priority: HIGH
+              discover: NO_DISCOVER
+              description: >-
+                The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service must be less than
+                {#EXPECT_VALUE_NUMBER}, but is greater than or equal to that limit. The problem stays open until the
+                service answers with a number that satisfies the comparison again. If no number can be read for
+                {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}, No JSON value for {#NAME} (number) takes over.
+            - uuid: 2c87fac4270d44e38810fcb6e3698623
+              expression: |
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number["{#URL}#{#NAME}"])>{#EXPECT_VALUE_NUMBER}
+                and
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
+              recovery_mode: RECOVERY_EXPRESSION
+              recovery_expression: >-
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
+                or
+                count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],
+                {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","0")=0
+              name: 'JSON value for {#NAME} exceeds expected maximum (number)'
+              priority: HIGH
+              discover: NO_DISCOVER
+              description: >-
+                The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service must be less than or equal
+                to {#EXPECT_VALUE_NUMBER}, but exceeds that limit. The problem stays open until the service answers with
+                a number that satisfies the comparison again. If no number can be read for
+                {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}, No JSON value for {#NAME} (number) takes over.
+            - uuid: a0e9315f06b9422d9c26878a52bb4cf0
+              expression: |
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number["{#URL}#{#NAME}"])<={#EXPECT_VALUE_NUMBER}
+                and
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
+              recovery_mode: RECOVERY_EXPRESSION
+              recovery_expression: >-
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
+                or
+                count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],
+                {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","0")=0
+              name: 'JSON value for {#NAME} is not above expected limit (number)'
+              priority: HIGH
+              discover: NO_DISCOVER
+              description: >-
+                The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service must be greater than
+                {#EXPECT_VALUE_NUMBER}, but is less than or equal to that limit. The problem stays open until the
+                service answers with a number that satisfies the comparison again. If no number can be read for
+                {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}, No JSON value for {#NAME} (number) takes over.
+            - uuid: 1dc538495f45492e9abf7069061fbf03
+              expression: |
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number["{#URL}#{#NAME}"])<{#EXPECT_VALUE_NUMBER}
+                and
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
+              recovery_mode: RECOVERY_EXPRESSION
+              recovery_expression: >-
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
+                or
+                count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],
+                {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","0")=0
+              name: 'JSON value for {#NAME} is below expected minimum (number)'
+              priority: HIGH
+              discover: NO_DISCOVER
+              description: >-
+                The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service must be greater than or
+                equal to {#EXPECT_VALUE_NUMBER}, but is below that limit. The problem stays open until the service
+                answers with a number that satisfies the comparison again. If no number can be read for
+                {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}, No JSON value for {#NAME} (number) takes over.
           parameters:
             - name: config
               value: '{$PUSHIT.WEBCHECK.CONFIG}'
