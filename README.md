@@ -1210,6 +1210,12 @@ available on its GitHub repo. Its configuration is stored in the default, projec
   `{$PUSHIT.WEBCHECK.CONFIG}`, so that a syntax error, or a mistake that the trimming introduces, shows up before the
   import. It fails when `config.example.json` is missing or not valid JSON. Line numbers in the errors of `duk` refer
   to `.discovery_script.check.js`.
+- `make test` runs the trimmed script with `duk` on every configuration in `tests/cases.json` and fails if one of
+  them is not accepted or rejected as its `expect` says. When you change what the script accepts, add a case there.
+- `DUK=<interpreter>` runs `check-js` and `test` with another interpreter than `duk`.
+
+GitHub Actions run `make`, `make lint`, `make check-js` and `make test` on every pull request and on every push to
+`master` (`.github/workflows/ci.yml`).
 
 Zabbix runs the script in Duktape, which supports ECMAScript 5.1 and only a few later features, so keep the script to
 ES5: `var`, `function` and no arrow functions or template literals. The trimming removes every line that starts with
@@ -1228,9 +1234,12 @@ counterpart in an existing installation, so re-importing updates instead of dupl
    the links at its end.
 2. Change the tag in the link in the description of `{$PUSHIT.WEBCHECK.CONFIG}` in `template.yaml` to the new
    version, so that an installed template points to the README that matches it.
-3. Commit, tag the commit with the version, such as `vX.Y.Z`, and push the tag.
-4. On the tagged commit, run `make`, `make lint` and `make check-js`, then create the GitHub release for the tag and
-   attach `template.dist.yaml` to it. The [Quick start](#-quick-start) sends users to the assets of the latest release.
+3. Merge these changes, then create the GitHub release with a new tag for the version, such as `vX.Y.Z`, on that
+   commit.
+4. Publishing the release starts the workflow `.github/workflows/release.yml`. It builds `template.dist.yaml` from the
+   tagged commit, lints it and attaches it to the release. The [Quick start](#-quick-start) sends users to the assets
+   of the latest release, so check that the file is there. If the workflow failed, fix the cause and start it again
+   under *Actions → Release → Run workflow* with the tag.
 
 ## 📄 License
 
