@@ -522,6 +522,9 @@ zabbix_export:
                 - operator: REGEXP
                   value: '^JSON path \(text\).*$'
                   discover: DISCOVER
+                - operator: REGEXP
+                  value: '^JSON path [^(].*$'
+                  discover: DISCOVER
             - name: 'Enable json_path_number'
               step: '3'
               filter:
