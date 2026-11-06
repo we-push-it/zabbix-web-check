@@ -17,7 +17,8 @@ zabbix_export:
           key: pushit.webcheck.discovery.certificate
           delay: 10m
           params: |-
-            /* content of discovery_script.js will be put here by Makefile */
+            // replaced with the content of discovery_script.js by make, see template.dist.yaml
+            throw 'This is the unbuilt source template.yaml, import template.dist.yaml from https://github.com/we-push-it/zabbix-web-check/releases instead';
           filter:
             conditions:
               - macro: '{#TYPES}'
@@ -140,7 +141,8 @@ zabbix_export:
           key: pushit.webcheck.discovery.http
           delay: 10m
           params: |-
-            /* content of discovery_script.js will be put here by Makefile */
+            // replaced with the content of discovery_script.js by make, see template.dist.yaml
+            throw 'This is the unbuilt source template.yaml, import template.dist.yaml from https://github.com/we-push-it/zabbix-web-check/releases instead';
           filter:
             evaltype: OR
             conditions:
@@ -629,7 +631,8 @@ zabbix_export:
           key: pushit.webcheck.discovery.performance
           delay: 10m
           params: |-
-            /* content of discovery_script.js will be put here by Makefile */
+            // replaced with the content of discovery_script.js by make, see template.dist.yaml
+            throw 'This is the unbuilt source template.yaml, import template.dist.yaml from https://github.com/we-push-it/zabbix-web-check/releases instead';
           filter:
             conditions:
               - macro: '{#TYPES}'
