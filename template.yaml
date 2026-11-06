@@ -395,6 +395,8 @@ zabbix_export:
               recovery_expression: >-
                 last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
                 or
+                count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],1s)>0
+                and
                 count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],
                 {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","0")=0
               name: 'JSON value for {#NAME} does not match expected value (number)'
@@ -414,6 +416,8 @@ zabbix_export:
               recovery_expression: >-
                 last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
                 or
+                count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],1s)>0
+                and
                 count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],
                 {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","0")=0
               name: 'JSON value for {#NAME} matches prohibited value (number)'
@@ -433,6 +437,8 @@ zabbix_export:
               recovery_expression: >-
                 last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
                 or
+                count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],1s)>0
+                and
                 count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],
                 {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","0")=0
               name: 'JSON value for {#NAME} is not below expected limit (number)'
@@ -452,6 +458,8 @@ zabbix_export:
               recovery_expression: >-
                 last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
                 or
+                count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],1s)>0
+                and
                 count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],
                 {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","0")=0
               name: 'JSON value for {#NAME} exceeds expected maximum (number)'
@@ -471,6 +479,8 @@ zabbix_export:
               recovery_expression: >-
                 last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
                 or
+                count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],1s)>0
+                and
                 count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],
                 {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","0")=0
               name: 'JSON value for {#NAME} is not above expected limit (number)'
@@ -490,6 +500,8 @@ zabbix_export:
               recovery_expression: >-
                 last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
                 or
+                count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],1s)>0
+                and
                 count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],
                 {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","0")=0
               name: 'JSON value for {#NAME} is below expected minimum (number)'
