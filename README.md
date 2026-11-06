@@ -756,6 +756,11 @@ All other items and triggers keep their names and keys. Update whatever refers t
 items and expression macros that use `pushit.webcheck.http.json_path[...]`, conditions of actions that match trigger
 names, and API scripts. The new **Performance** rule creates nothing until an entry gets a `performance` key.
 
+**Entries that shared a URL in v0.2.x** can still have their checks on the raw item of the last of them, if you came
+to v0.3.x from v0.2.x. Once that entry is removed, renamed or gets a new URL, the others report **No data for ...**.
+Delete the disabled **Response {#NAME}** or **Certificate data {#NAME}** item with the old URL and click
+*Execute now*: the checks are created again on the entry's own raw item.
+
 ## 🔢 Macros
 
 All macros are defined on the template and can be overridden per host. Time values are Zabbix time expressions such as
@@ -838,7 +843,7 @@ become *Not supported* and the discovered items stay as they are.
 | `{#TYPES}` | The checks of the entry, comma-separated: `http_status`, `json_path_text`, `json_path_number`, `certificate` and `http_performance` for the keys `expectStatus`, `json_text`, `json_number`, `certificate` and `performance` |
 | `{#EXPECT_STATUS}` | `expectStatus` |
 | `{#JSON_PATH_TEXT}`, `{#EXPECT_VALUE_TEXT}`, `{#JSON_OPERATOR_TEXT}` | `path`, `expect` and `operator` (default `=`) of `json_text`; the operator is empty for entries without `json_text` |
-| `{#JSON_PATH_NUMBER}`, `{#EXPECT_VALUE_NUMBER}`, `{#JSON_OPERATOR_NUMBER}` | The same for `json_number`; the expected value is written as a plain number, so `"1.50"` becomes `1.5` |
+| `{#JSON_PATH_NUMBER}`, `{#EXPECT_VALUE_NUMBER}`, `{#JSON_OPERATOR_NUMBER}` | The same for `json_number`; the expected value is normalized to a number, so `"1.50"` becomes `1.5`, and very small or very large values get an exponent, such as `1e-7` |
 | `{#CERT_WARN_DAYS}`, `{#CERT_AVG_DAYS}`, `{#CERT_HIGH_DAYS}` | `warning`, `average` and `high` of `certificate`, `-1` for a level that is omitted |
 | `{#PERF_NODATA}` | `nodata` of `performance` |
 | `{#PERF_WARN}`, `{#PERF_AVG}`, `{#PERF_HIGH}`, `{#PERF_DISASTER}` | `warning`, `average`, `high` and `disaster` of `performance`, `-1` for a level that is omitted |
@@ -959,7 +964,8 @@ preprocessing steps. The first three are those of **JSON path (text) {#NAME}**, 
 It accepts what Zabbix
 accepts for a float item: a decimal number with optional sign, fraction and exponent, optionally in double quotes and
 with spaces around it. The only exception is a number beyond the range of a float, such as `1e400`: then the readable
-item is `1` while **JSON path (number) {#NAME}** is *Not supported*, and the comparison trigger turns *Unknown*.
+item is `1` while **JSON path (number) {#NAME}** is *Not supported*, and the comparison trigger turns *Unknown*, so
+no problem is raised as long as the endpoint returns such a value.
 
 ```text
 \A *("?)[+-]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?\1 *[\r\n]*\z

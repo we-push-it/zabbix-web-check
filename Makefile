@@ -7,7 +7,7 @@ template.dist.yaml: template.yaml .discovery_script.trimmed.js
 
 # Removes type annotations and noinspection comments
 .discovery_script.trimmed.js: discovery_script.js
-	 grep -v '^[[:space:]]*// noinspection' $< | grep -v '^/\*' | grep -v '^\ *\*'  > $@
+	 grep -v '^[[:space:]]*// noinspection' $< | grep -v '^/\*' | grep -v '^ *\*'  > $@
 
 # Run yamllint on the template and the generated file
 lint: template.yaml template.dist.yaml
@@ -16,7 +16,7 @@ lint: template.yaml template.dist.yaml
 
 # Check whether the discovery script can be parsed by the JS runtime used by Zabbix
 check-js: .discovery_script.check.js
-	$(info Line numbers emitted by duk do not match the source file discovery-script.js, so check $< in case of error)
+	$(info Line numbers emitted by duk do not match the source file discovery_script.js, so check $< in case of error)
 	duk $<
 .PHONY: check-js
 

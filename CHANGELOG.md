@@ -27,8 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - an entry name with characters other than Latin letters, digits, `_`, `-` and `.`, or a name used twice
   - an entry without a check or without `url`, and missing values
   - status codes outside 100 to 599, a `json_number.expect` that is not a number, unknown operators, certificate levels
-    that are not numbers such as `"30d"`, a `nodata` that is not a time period, and performance levels outside 0 to 600
-    or with user macros
+    that are not numbers such as `"30d"`, a `nodata` that is not a time period, and performance levels that are negative
+    (except `-1`), 600 or more, or user macros
   - expected text values with leading or trailing spaces, and JSON paths with `"` or a syntax error
 
 ### Changed
@@ -38,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `expectStatus` (`{#EXPECT_STATUS}`), `json_text` with `path` and `expect` (`{#JSON_PATH}`, `{#EXPECT_VALUE}`), and
     `certificate` with `warning`, `average` and `high` (`{#CERT_WARN_DAYS}`, `{#CERT_AVG_DAYS}`, `{#CERT_HIGH_DAYS}`).
     A certificate level of `-1` now disables the level
+  - The LLD macros `{#JSON_PATH}` and `{#EXPECT_VALUE}` are now `{#JSON_PATH_TEXT}` and `{#EXPECT_VALUE_TEXT}`;
+    update item or trigger prototypes you customised with the old names
   - The section *Migration from v0.3.x* in the README has a `jq` command that converts a v0.3.x value
   - Import `template.dist.yaml` of this release, convert the macro on every host, then click *Execute now* on the three
     discovery rules of every host and check that none of them is *Not supported*
