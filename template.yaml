@@ -5,7 +5,9 @@ zabbix_export:
     - uuid: f589289cf25945c7ad8c6ef054b07c5e
       template: 'PUSH IT Webcheck'
       name: 'PUSH IT Webcheck'
-      description: 'This template provides checks for one or more health endpoints running on this machine.'
+      description: >-
+        Checks HTTP status codes, JSON values and TLS certificates of the endpoints listed in {$PUSHIT.WEBCHECK.CONFIG}.
+        All requests are made by the Zabbix agent of the host.
       groups:
         - name: Templates
       discovery_rules:
@@ -20,74 +22,81 @@ zabbix_export:
             conditions:
               - macro: '{#TYPES}'
                 value: '^(.+,)*certificate(,.+)*$'
-          lifetime_type: DELETE_IMMEDIATELY
           description: 'Discovery rule for items based on x509 certificate data'
           item_prototypes:
             - uuid: 6881257e2c9641039824bc4dc526e486
               name: 'Certificate data {#NAME}'
-              key: 'web.certificate.get["{#URL}"]'
+              key: 'web.certificate.get["{#URL}#{#NAME}"]'
               delay: '{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}'
               history: '{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}'
               value_type: TEXT
               trigger_prototypes:
                 - uuid: dd2d82fb9d1546808da3a26546c69fe5
                   expression: |
-                    nodata(/PUSH IT Webcheck/web.certificate.get["{#URL}"],{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE})=1
+                    nodata(/PUSH IT Webcheck/web.certificate.get["{#URL}#{#NAME}"],{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE})=1
                   name: 'Certificate data for {#NAME} is unavailable'
                   priority: INFO
             - uuid: 26de9b6d37b84aa8b97c90eec51260c5
               name: 'Certificate expiration {#NAME}'
               type: DEPENDENT
-              key: 'pushit.webcheck.certificate.not_after[{#NAME}]'
+              key: 'pushit.webcheck.certificate.not_after["{#URL}#{#NAME}"]'
+              units: unixtime
               preprocessing:
                 - type: JSONPATH
                   parameters:
                     - $.x509.not_after.timestamp
               master_item:
-                key: 'web.certificate.get["{#URL}"]'
+                key: 'web.certificate.get["{#URL}#{#NAME}"]'
             - uuid: b349b916eefa49cca172afb02e7fe211
               name: 'Certificate validity {#NAME}'
               type: DEPENDENT
-              key: 'pushit.webcheck.certificate.is_valid[{#NAME}]'
+              key: 'pushit.webcheck.certificate.is_valid["{#URL}#{#NAME}"]'
               value_type: TEXT
               preprocessing:
                 - type: JSONPATH
                   parameters:
                     - $.result.value
               master_item:
-                key: 'web.certificate.get["{#URL}"]'
+                key: 'web.certificate.get["{#URL}#{#NAME}"]'
               trigger_prototypes:
                 - uuid: 654d5ceb41a74e20b6d5725505a42db7
-                  expression: 'last(/PUSH IT Webcheck/pushit.webcheck.certificate.is_valid[{#NAME}]) <> "valid"'
+                  expression: 'last(/PUSH IT Webcheck/pushit.webcheck.certificate.is_valid["{#URL}#{#NAME}"]) <> "valid"'
                   name: 'Certificate for {#NAME} is invalid'
                   priority: HIGH
             - uuid: d6bfcdbd070f4f5991e9eaaf3f561b85
               name: 'Days until certificate expires ({#NAME})'
-              type: CALCULATED
-              key: 'pushit.webcheck.certificate.days_until_expiration[{#NAME}]'
-              delay: 6h
+              type: DEPENDENT
+              key: 'pushit.webcheck.certificate.days_until_expiration["{#URL}#{#NAME}"]'
               value_type: FLOAT
-              units: days
-              params: 'round((last(//pushit.webcheck.certificate.not_after[{#NAME}]) - now()) / 86400, 1)'
+              units: '!days'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - $.x509.not_after.timestamp
+                - type: JAVASCRIPT
+                  parameters:
+                    - 'return Math.round((value - Date.now() / 1000) / 86400 * 10) / 10;'
+              master_item:
+                key: 'web.certificate.get["{#URL}#{#NAME}"]'
               trigger_prototypes:
                 - uuid: d48d334e56e34d33a43d2d95d82d4200
                   expression: |
-                    last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_WARN_DAYS}
+                    last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration["{#URL}#{#NAME}"]) <= {#CERT_WARN_DAYS}
                   name: 'Certificate for {#NAME} will expire in {#CERT_WARN_DAYS} days or less (WARN)'
                   priority: WARNING
                 - uuid: 1cc9cad76a92426383ab473e3c6df510
                   expression: |
-                    last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_AVG_DAYS}
+                    last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration["{#URL}#{#NAME}"]) <= {#CERT_AVG_DAYS}
                   name: 'Certificate for {#NAME} will expire in {#CERT_AVG_DAYS} days or less (AVERAGE)'
                   priority: AVERAGE
                 - uuid: bed26a45d9ae43ecb186433ce69a33d1
                   expression: |
-                    last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration[{#NAME}]) <= {#CERT_HIGH_DAYS}
+                    last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration["{#URL}#{#NAME}"]) <= {#CERT_HIGH_DAYS}
                   name: 'Certificate for {#NAME} will expire in {#CERT_HIGH_DAYS} days or less (HIGH)'
                   priority: HIGH
-                  description: |
-                    The certificate for {#URL} will expire in {#CERT_HIGH_DAYS} days or less. Immediate action required or
-                    the monitored application will become unavailable.
+                  description: >-
+                    The certificate for {#URL} will expire in {#CERT_HIGH_DAYS} days or less. Immediate action required
+                    or the monitored application will become unavailable.
           parameters:
             - name: config
               value: '{$PUSHIT.WEBCHECK.CONFIG}'
@@ -141,58 +150,103 @@ zabbix_export:
                 value: '^(.+,)*json_path_text(,.+)*$'
               - macro: '{#TYPES}'
                 value: '^(.+,)*json_path_number(,.+)*$'
-          lifetime_type: DELETE_IMMEDIATELY
           description: 'Discovery rule for items based on an HTTP response from the endpoint'
           item_prototypes:
             - uuid: a0644fcad9c249a38f28b4285e38392c
               name: 'Response {#NAME}'
-              key: 'web.page.get["{#URL}"]'
+              key: 'web.page.get["{#URL}#{#NAME}"]'
               delay: '{$PUSHIT.WEBCHECK.HTTP.INTERVAL}'
               history: '0'
               value_type: TEXT
             - uuid: d62950d3aa92463e982e4a8ea60c4169
               name: 'HTTP status {#NAME}'
               type: DEPENDENT
-              key: 'pushit.webcheck.http.status[{#NAME}]'
+              key: 'pushit.webcheck.http.status["{#URL}#{#NAME}"]'
               discover: NO_DISCOVER
               preprocessing:
+                - type: CHECK_NOT_SUPPORTED
+                  parameters:
+                    - '-1'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
                 - type: REGEX
                   parameters:
-                    - '\AHTTP/[0-9.]+[ \t]+([0-9]{3})(?:[ \t]|\r?\n)'
+                    - '\A(?:HTTP/[^\n]*\n(?:[^\r\n][^\n]*\n)*\r?\n(?=HTTP/))*HTTP/[0-9.]+[ \t]+([0-9]{3})(?:[ \t]|\r?\n|$)'
                     - \1
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
               master_item:
-                key: 'web.page.get["{#URL}"]'
+                key: 'web.page.get["{#URL}#{#NAME}"]'
               trigger_prototypes:
                 - uuid: ba3ea028aa854c2fbc62061acb70259a
                   expression: |
-                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}],{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE})=1
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.status["{#URL}#{#NAME}"])<>{#EXPECT_STATUS}
+                    and
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.status["{#URL}#{#NAME}"])<>0
+                  recovery_mode: RECOVERY_EXPRESSION
+                  recovery_expression: >-
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.status["{#URL}#{#NAME}"])={#EXPECT_STATUS}
                     or
-                    last(/PUSH IT Webcheck/pushit.webcheck.http.status[{#NAME}])<>{#EXPECT_STATUS}
+                    count(/PUSH IT Webcheck/pushit.webcheck.http.status["{#URL}#{#NAME}"],
+                    {$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE},"ne","0")=0
                   name: 'Unexpected status code for {#NAME}'
                   priority: HIGH
-                  description: |
-                    The status code of the monitored service does not match the expected status {#EXPECT_STATUS} code or
-                    no status code is available for more than {$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}.
+                  description: >-
+                    The status code of the monitored service does not match the expected status code {#EXPECT_STATUS}.
+                    The problem stays open until the service answers with {#EXPECT_STATUS} again. If only failed
+                    requests (0) arrive for {$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}, No status code for {#NAME}
+                    takes over.
+                - uuid: 74b6bc13eb3a435da550919fdf3cdc72
+                  expression: >-
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.status["{#URL}#{#NAME}"])=0
+                    and
+                    count(/PUSH IT Webcheck/pushit.webcheck.http.status["{#URL}#{#NAME}"],
+                    {$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE},"ne","0")=0
+                  name: 'No status code for {#NAME}'
+                  priority: HIGH
+                  description: >-
+                    The monitored service has not answered with a status code within the last
+                    {$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}: it refused the connection, did not answer within the
+                    item timeout or sent no valid status line. HTTP status {#NAME} is 0 in that case.
+                - uuid: 0f8fa44a14fc484b8dc9b167ed2c8111
+                  expression: |
+                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.status["{#URL}#{#NAME}"],{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE})=1
+                  name: 'No data for HTTP status {#NAME}'
+                  priority: WARNING
+                  description: >-
+                    No value at all, not even 0, has arrived for HTTP status {#NAME} for more than
+                    {$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}. The check is not running, usually because the Zabbix
+                    agent or the whole host is not reachable, or because Response {#NAME} is disabled. Whether the
+                    monitored service is up is unknown; if it runs on the same host, it may be down as well.
             - uuid: 4517fccf57e3473a80e786ada27dac6b
               name: 'JSON path (text) {#NAME}'
               type: DEPENDENT
-              key: 'pushit.webcheck.http.json_path_text[{#NAME}]'
+              key: 'pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"]'
               value_type: TEXT
               discover: NO_DISCOVER
               preprocessing:
+                - type: CHECK_NOT_SUPPORTED
+                  parameters:
+                    - '-1'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '[no value]'
                 - type: REGEX
                   parameters:
-                    - '\r?\n\r?\n([\s\S]*)'
+                    - '\A(?:HTTP/[^\n]*\n(?:[^\r\n][^\n]*\n)*\r?\n(?=HTTP/))*HTTP/[^\n]*\n(?:[^\r\n][^\n]*\n)*\r?\n[^{\[]*([\s\S]*)'
                     - \1
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '[no value]'
                 - type: JSONPATH
                   parameters:
                     - '{#JSON_PATH_TEXT}'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '[no value]'
               master_item:
-                key: 'web.page.get["{#URL}"]'
+                key: 'web.page.get["{#URL}#{#NAME}"]'
               trigger_prototypes:
                 - uuid: 302aad4bd03348a8b5da8c8fb1e3d5ba
                   expression: |
-                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text[{#NAME}],{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE})=1
+                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"],{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE})=1
                   name: 'Missing JSON value for {#NAME} (text)'
                   priority: WARNING
                   description: |
@@ -200,7 +254,7 @@ zabbix_export:
                     than {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}.
                 - uuid: 4952237d989a430ca7a26365ce251990
                   expression: |
-                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text[{#NAME}])<>"{#EXPECT_VALUE_TEXT}"
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"])<>"{#EXPECT_VALUE_TEXT}"
                   name: 'JSON value for {#NAME} does not match expected value (text)'
                   priority: HIGH
                   discover: NO_DISCOVER
@@ -209,7 +263,7 @@ zabbix_export:
                     expected value "{#EXPECT_VALUE_TEXT}".
                 - uuid: da42163600d148818d06da0adfbffc42
                   expression: |
-                      last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text[{#NAME}])="{#EXPECT_VALUE_TEXT}"
+                      last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"])="{#EXPECT_VALUE_TEXT}"
                   name: 'JSON value for {#NAME} matches prohibited value (text)'
                   priority: HIGH
                   discover: NO_DISCOVER
@@ -512,42 +566,42 @@ zabbix_export:
       macros:
         - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}'
           value: 90m
-          description: |
+          description: >-
             How long the history of the certificate data collection (raw, JSON data) is kept. This does not affect the
             actual checks (validity, days remaining...), only the raw data. This value should be larger than
-            PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL and must be larger than PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE.
+            PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL, must be larger than PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE and must
+            be at least 1h, the minimum history storage period of Zabbix.
         - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}'
           value: 15m
-          description: |
-            Controls the interval in which certificate data is fetched for the endpoint. This is used for Certificate
-            checks.
+          description: >-
+            Controls the interval in which certificate data is fetched for the endpoint. This is used for entries whose
+            {#TYPES} contains certificate.
         - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE}'
           value: 30m
-          description: |
+          description: >-
             Time expression for how long absent certificate data is tolerated before a problem of INFO severity is
-            raised. This should be higher than PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL or it will not have any effect.
-            If you raise this value, you should review the value of PUSHIT.WEBCHECK.CERTIFICATE.HISTORY and its
-            description outlining constraints applying to it.
+            raised. Must be larger than PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL, otherwise it provides no tolerance and can
+            raise false no-data problems. If you raise this value, you should review the value of
+            PUSHIT.WEBCHECK.CERTIFICATE.HISTORY and its description outlining constraints applying to it.
         - macro: '{$PUSHIT.WEBCHECK.CONFIG}'
           value: '{}'
-          description: |
+          description: >-
             Configuration for endpoints to check, see
-            [README](https://github.com/we-push-it/zabbix-web-check/blob/master/README.md) for complete documentation
-            of this structure.
+            https://github.com/we-push-it/zabbix-web-check/blob/v0.3.0/README.md for complete documentation of this
+            structure.
         - macro: '{$PUSHIT.WEBCHECK.HTTP.INTERVAL}'
           value: 1m
-          description: |
-            Controls the interval in which the HTTP endpoint is called. This is used for HTTP Status and JSONPath
-            checks.
+          description: >-
+            Controls the interval in which the HTTP endpoint is called. This is used for entries whose {#TYPES} contains
+            http_status or json_path.
         - macro: '{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}'
           value: 3m
-          description: |
-            Time expression for how long an absent status code is tolerated before the status code is considered not
-            matching the expected status code. This should be higher than PUSHIT.WEBCHECK.HTTP.INTERVAL or it will not
-            have any effect.
+          description: >-
+            Time expression for how long an absent status code is tolerated before a problem is raised. Must be larger
+            than PUSHIT.WEBCHECK.HTTP.INTERVAL, otherwise it provides no tolerance and can raise false no-data problems.
         - macro: '{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}'
           value: 3m
-          description: |
-            Time expression for how long an absent http response (and thus JSON-path-selected value) is tolerated before
-            the JSON-path-selected value is considered not matching the expected value. This should be higher than
-            PUSHIT.WEBCHECK.HTTP.INTERVAL or it will not have any effect.
+          description: >-
+            Time expression for how long a missing JSON value (no response, a body that is not JSON or nothing at the
+            path) is tolerated before a problem is raised. Must be larger than PUSHIT.WEBCHECK.HTTP.INTERVAL,
+            otherwise it provides no tolerance and can raise false no-data problems.
