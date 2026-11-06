@@ -6,8 +6,8 @@ zabbix_export:
       template: 'PUSH IT Webcheck'
       name: 'PUSH IT Webcheck'
       description: >-
-        Checks HTTP status codes, JSON values and TLS certificates of the endpoints listed in {$PUSHIT.WEBCHECK.CONFIG}.
-        All requests are made by the Zabbix agent of the host.
+        Checks HTTP status codes, JSON values, page load times and TLS certificates of the endpoints listed in
+        {$PUSHIT.WEBCHECK.CONFIG}. All requests are made by the Zabbix agent of the host.
       groups:
         - name: Templates
       discovery_rules:
@@ -650,8 +650,11 @@ zabbix_export:
                   expression: nodata(/PUSH IT Webcheck/web.page.perf["{#URL}#{#NAME}"],{#PERF_NODATA})=1
                   name: 'Missing HTTP performance data for {#NAME}'
                   priority: WARNING
-                  description: |
-                    Performance data for {#NAME} was unavailable for {#PERF_NODATA} or more.
+                  description: >-
+                    No load time has been measured for {#NAME} for {#PERF_NODATA}: the request failed or took longer
+                    than the item timeout of {#PERF_TIMEOUT}, or the check is not running, for example because the
+                    Zabbix agent is not reachable. The threshold triggers keep their last state until a load time is
+                    measured again.
                 - uuid: c014d2e41ba740ce83092e0cfc5fd084
                   expression: last(/PUSH IT Webcheck/web.page.perf["{#URL}#{#NAME}"])>{#PERF_WARN}
                   name: 'Performance of {#NAME} exceeds WARN limit'
@@ -728,8 +731,8 @@ zabbix_export:
         - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}'
           value: 15m
           description: >-
-            Controls the interval in which certificate data is fetched for the endpoint. This is used for entries whose
-            {#TYPES} contains certificate.
+            Controls the interval in which certificate data is fetched for the endpoint. This is used for entries with
+            a certificate check.
         - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE}'
           value: 30m
           description: >-
@@ -740,14 +743,14 @@ zabbix_export:
         - macro: '{$PUSHIT.WEBCHECK.CONFIG}'
           value: '{}'
           description: >-
-            Configuration for endpoints to check, see
+            Configuration for endpoints to check, a JSON object with one property per endpoint, see
             https://github.com/we-push-it/zabbix-web-check/blob/v0.3.0/README.md for complete documentation of this
             structure.
         - macro: '{$PUSHIT.WEBCHECK.HTTP.INTERVAL}'
           value: 1m
           description: >-
-            Controls the interval in which the HTTP endpoint is called. This is used for entries whose {#TYPES} contains
-            http_status or json_path.
+            Controls the interval in which the HTTP endpoint is called. This is used for entries with expectStatus,
+            json_text, json_number or performance.
         - macro: '{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}'
           value: 3m
           description: >-
@@ -756,6 +759,7 @@ zabbix_export:
         - macro: '{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}'
           value: 3m
           description: >-
-            Time expression for how long a missing JSON value (no response, a body that is not JSON or nothing at the
-            path) is tolerated before a problem is raised. Must be larger than PUSHIT.WEBCHECK.HTTP.INTERVAL,
-            otherwise it provides no tolerance and can raise false no-data problems.
+            Time expression for how long a missing JSON value (no response, a body that is not JSON, nothing at the
+            path or, for json_number, a value that is not a number) is tolerated before a problem is raised. Must be
+            larger than PUSHIT.WEBCHECK.HTTP.INTERVAL, otherwise it provides no tolerance and can raise false no-data
+            problems.
