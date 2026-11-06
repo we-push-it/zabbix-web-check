@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [v0.4.0] - 2026-11-06
 ### Added
 - Support for numeric values in the JSONPath check: `json_number` reads a number from a JSON body into the float item
   `JSON path (number) {#NAME}` and compares it with the operator `=` (default), `<>`, `<`, `<=`, `>` or `>=`
@@ -129,7 +131,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `json_path` check
 - `certificate` check
 
-[Unreleased]: https://github.com/we-push-it/zabbix-web-check/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/we-push-it/zabbix-web-check/compare/v0.4.0...HEAD
+[v0.4.0]: https://github.com/we-push-it/zabbix-web-check/compare/v0.3.0...v0.4.0
 [v0.3.0]: https://github.com/we-push-it/zabbix-web-check/compare/v0.2.0...v0.3.0
 [v0.2.0]: https://github.com/we-push-it/zabbix-web-check/compare/v0.1.0...v0.2.0
 [v0.1.0]: https://github.com/we-push-it/zabbix-web-check/compare/2d2d04f1...v0.1.0
