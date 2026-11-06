@@ -245,12 +245,13 @@ function getLevel(data, key, levelName, isLevel, what) {
 
 /**
  * JSON.parse keeps only the last of several properties with the same name, so an entry that was copied and not
- * renamed would silently replace the original one
+ * renamed would silently replace the original one, and a key repeated inside an entry would silently win
  * @param {string} text the configuration, valid JSON
- * @returns {string|null} the first entry name that is used more than once
+ * @returns {object|null} the first repeated name as {entry: the entry it belongs to or null, name: the name}
  */
 function findDuplicateName(text) {
-    var seen = {}, depth = 0, atName = false, i, end, c, name;
+    // one set of names per open object, null for an open array
+    var stack = [], atName = false, entry = null, i, end, c, name, names;
 
     for (i = 0; i < text.length; i++) {
         c = text.charAt(i);
@@ -262,20 +263,28 @@ function findDuplicateName(text) {
             }
             if (atName) {
                 name = JSON.parse(text.substring(i, end + 1));
-                if (has(seen, "#" + name)) {
-                    return name;
+                names = stack[stack.length - 1];
+                if (has(names, "#" + name)) {
+                    return {entry: stack.length === 1 ? null : entry, name: name};
                 }
-                seen["#" + name] = true;
+                names["#" + name] = true;
+                if (stack.length === 1) {
+                    entry = name;
+                }
                 atName = false;
             }
             i = end;
-        } else if (c === "{" || c === "[") {
-            depth++;
-            atName = c === "{" && depth === 1;
-        } else if (c === "}" || c === "]") {
-            depth--;
-        } else if (c === "," && depth === 1) {
+        } else if (c === "{") {
+            stack.push({});
             atName = true;
+        } else if (c === "[") {
+            stack.push(null);
+            atName = false;
+        } else if (c === "}" || c === "]") {
+            stack.pop();
+            atName = false;
+        } else if (c === ",") {
+            atName = stack.length > 0 && stack[stack.length - 1] !== null;
         }
     }
     return null;
@@ -299,8 +308,12 @@ if (!isObject(configData)) {
         JSON.stringify(configData);
 }
 duplicateName = findDuplicateName(configText);
+if (duplicateName !== null && duplicateName.entry === null) {
+    throw "Entry " + JSON.stringify(duplicateName.name) + " is defined more than once in PUSHIT.WEBCHECK.CONFIG";
+}
 if (duplicateName !== null) {
-    throw "Entry " + JSON.stringify(duplicateName) + " is defined more than once in PUSHIT.WEBCHECK.CONFIG";
+    throw "Entry " + JSON.stringify(duplicateName.entry) + ": key " + JSON.stringify(duplicateName.name) +
+        " is used more than once";
 }
 
 for (var key in configData) {
