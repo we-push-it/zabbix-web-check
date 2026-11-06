@@ -482,7 +482,6 @@ zabbix_export:
             conditions:
               - macro: '{#TYPES}'
                 value: '^(.+,)*http_performance(,.+)*$'
-          lifetime_type: DELETE_IMMEDIATELY
           description: 'Discovery rule for HTTP performance checks for the endpoint'
           item_prototypes:
             - uuid: 252b7ac30a05405c91546f13199c172e
