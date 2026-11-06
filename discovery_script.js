@@ -181,7 +181,7 @@ function isNumberOrMacro(data) {
  * @returns {boolean}
  */
 function isLoadTime(data) {
-    return isNumber(data) && (Number(data) >= 0 || Number(data) === -1);
+    return isNumber(data) && ((Number(data) >= 0 && Number(data) < 600) || Number(data) === -1);
 }
 
 /**
@@ -373,7 +373,7 @@ for (var key in configData) {
 
     // http_performance check, -1 disables a level
     if (has(item, "performance")) {
-        var seconds = "a load time in seconds such as 0.5, or -1 to disable the level";
+        var seconds = "a load time in seconds below 600 such as 0.5, or -1 to disable the level";
 
         checkObject(item.performance, "performance", ["nodata", "warning", "average", "high", "disaster"]);
         if (!isPeriod(item.performance.nodata)) {
@@ -386,14 +386,15 @@ for (var key in configData) {
         outputItem["{#PERF_DISASTER}"] = getLevel(item.performance, "performance", "disaster", isLoadTime, seconds);
 
         // Calculate the timeout for the web.page.performance item as the highest trigger point plus one second. This
-        // value is intentionally not configurable to avoid a configuration foot gun.
-        var performanceTimeout = Math.max(
-            outputItem["{#PERF_WARN}"],
-            outputItem["{#PERF_AVG}"],
-            outputItem["{#PERF_HIGH}"],
-            outputItem["{#PERF_DISASTER}"]
-        ) + 1;
-        outputItem["{#PERF_TIMEOUT}"] = performanceTimeout + "s";
+        // value is intentionally not configurable to avoid a configuration foot gun. Zabbix only accepts whole seconds
+        // from 1 to 600, so it is rounded up, and it is never shorter than the default agent item timeout of 3 seconds.
+        var performanceTimeout = Math.ceil(Math.max(
+            Number(outputItem["{#PERF_WARN}"]),
+            Number(outputItem["{#PERF_AVG}"]),
+            Number(outputItem["{#PERF_HIGH}"]),
+            Number(outputItem["{#PERF_DISASTER}"])
+        )) + 1;
+        outputItem["{#PERF_TIMEOUT}"] = Math.min(600, Math.max(3, performanceTimeout)) + "s";
     }
 
     for (var checkKey in checks) {
