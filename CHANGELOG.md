@@ -6,6 +6,63 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- Support for numeric values in the JSONPath check: `json_number` reads a number from a JSON body into the float item
+  `JSON path (number) {#NAME}` and compares it with the operator `=` (default), `<>`, `<`, `<=`, `>` or `>=`
+- Option to override the comparison operator on JSONPath checks with `operator`; `json_text` supports the equality
+  (`=`, default) and inequality (`<>`) operators
+- New check type HTTP performance: `performance` measures the page load time with `web.page.perf` and raises WARNING,
+  AVERAGE, HIGH and DISASTER problems above thresholds in seconds, and a WARNING when no load time is measured for the
+  time given in `nodata`
+  - The item timeout is computed from the thresholds: the highest one rounded up to whole seconds plus 1 second, at
+    least 3 and at most 600 seconds
+  - A slower page or a failed request makes the item *Not supported*: only the WARNING fires, after `nodata`
+- Option to disable single levels of the HTTP performance and certificate checks: a level that is omitted or set to
+  `-1` gets no trigger
+- `JSON path (number) readable {#NAME}` (`1` or `0`), `No JSON value for {#NAME} (number)` (HIGH) and
+  `No data for JSON path (number) {#NAME}` (WARNING), so that a `json_number` check tells a failed request or a value
+  that is not a number from a check that gets no data at all, as the other HTTP checks do
+- The discovery rules check every entry of the new format and stop with an error that names the entry, for example on
+  - unknown keys at any level, such as `json-text`, or `warn` in `certificate`
+  - an entry name with characters other than Latin letters, digits, `_`, `-` and `.`, or a name used twice
+  - an entry without a check or without `url`, and missing values
+  - status codes outside 100 to 599, a `json_number.expect` that is not a number, unknown operators, certificate levels
+    that are not numbers such as `"30d"`, a `nodata` that is not a time period, and performance levels that are negative
+    (except `-1`), 600 or more, or user macros
+  - expected text values with leading or trailing spaces, and JSON paths with `"` or a syntax error
+
+### Changed
+- **BC!** `{$PUSHIT.WEBCHECK.CONFIG}` is a JSON object with one property per endpoint instead of a list of LLD objects,
+  and its default is `{}`. Upgrade notes:
+  - The property name is the former `{#NAME}` and `url` the former `{#URL}`. The check keys replace `{#TYPES}`:
+    `expectStatus` (`{#EXPECT_STATUS}`), `json_text` with `path` and `expect` (`{#JSON_PATH}`, `{#EXPECT_VALUE}`), and
+    `certificate` with `warning`, `average` and `high` (`{#CERT_WARN_DAYS}`, `{#CERT_AVG_DAYS}`, `{#CERT_HIGH_DAYS}`).
+    A certificate level of `-1` now disables the level
+  - The LLD macros `{#JSON_PATH}` and `{#EXPECT_VALUE}` are now `{#JSON_PATH_TEXT}` and `{#EXPECT_VALUE_TEXT}`;
+    update item or trigger prototypes you customised with the old names
+  - The section *Migration from v0.3.x* in the README has a `jq` command that converts a v0.3.x value
+  - Import `template.dist.yaml` of this release, convert the macro on every host, then click *Execute now* on the three
+    discovery rules of every host and check that none of them is *Not supported*
+  - Until the macro of a host is converted, all three rules stop with
+    `PUSHIT.WEBCHECK.CONFIG uses the list format of v0.3.x and earlier, ...` and change nothing on the host: the items
+    and triggers of v0.3.x keep working
+  - The first successful run renames the items and triggers below in place, so they keep their ids, history and open
+    problems. Rename entries or change URLs only after that run
+  - From v0.2.x or older, update to v0.3.0 first and follow its upgrade notes
+- **BC!** The template to import is `template.dist.yaml`, attached to the GitHub release. `template.yaml` in the
+  repository is only its source: the discovery script is in `discovery_script.js`, and `make` puts it into the
+  template. Imported on its own, `template.yaml` makes all three discovery rules stop with
+  `This is the unbuilt source template.yaml, import template.dist.yaml from https://github.com/we-push-it/zabbix-web-check/releases instead`
+- **BC!** Rename item `JSON path {#NAME}` to `JSON path (text) {#NAME}`. This change also renames the Zabbix item key
+  from `pushit.webcheck.http.json_path["{#URL}#{#NAME}"]` to `pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"]` and
+  the internal type `json_path` in `{#TYPES}` to `json_path_text`. Update calculated items, expression macros and API
+  scripts that use the old key
+- **BC!** Rename the triggers of JSONPath checks: `Unexpected JSON value for {#NAME}` to
+  `JSON value for {#NAME} does not match expected value (text)`, `No JSON value for {#NAME}` to
+  `No JSON value for {#NAME} (text)` and `No data for JSON path {#NAME}` to `No data for JSON path (text) {#NAME}`.
+  The names of the certificate expiry triggers end in `(WARN)`, `(AVERAGE)` or `(HIGH)`. Review actions that match
+  trigger names
+- A third discovery rule, **Performance**, discovers the `performance` checks
 
 ## [v0.3.0] - 2026-11-05
 ### Added

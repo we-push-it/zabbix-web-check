@@ -6,8 +6,8 @@ zabbix_export:
       template: 'PUSH IT Webcheck'
       name: 'PUSH IT Webcheck'
       description: >-
-        Checks HTTP status codes, JSON values and TLS certificates of the endpoints listed in {$PUSHIT.WEBCHECK.CONFIG}.
-        All requests are made by the Zabbix agent of the host.
+        Checks HTTP status codes, JSON values, page load times and TLS certificates of the endpoints listed in
+        {$PUSHIT.WEBCHECK.CONFIG}. All requests are made by the Zabbix agent of the host.
       groups:
         - name: Templates
       discovery_rules:
@@ -16,160 +16,13 @@ zabbix_export:
           type: SCRIPT
           key: pushit.webcheck.discovery.certificate
           delay: 10m
-          params: |
-            var keys = ['{#NAME}', '{#URL}', '{#TYPES}', '{#EXPECT_STATUS}', '{#JSON_PATH}', '{#EXPECT_VALUE}',
-                    '{#CERT_WARN_DAYS}', '{#CERT_AVG_DAYS}', '{#CERT_HIGH_DAYS}'],
-                checks = ['http_status', 'json_path', 'certificate'],
-                macro = /\{\$[A-Z0-9_.]+(?:: *(?:"(?:[^"\\]|\\"|\\(?!"))*" *|[^ "}][^}]*)?)?\}/,
-                names = {},
-                entries, entry, label;
-
-            function fail(key, what) {
-                var value = entry[key];
-
-                throw label + ': ' + key + ' must be ' + what
-                    + (value === undefined ? ', but it is missing' : ', got ' + JSON.stringify(value));
-            }
-
-            function check(key, test, what) {
-                if (!test(entry[key])) {
-                    fail(key, what);
-                }
-            }
-
-            function isText(value) {
-                return typeof value === 'string' && /\S/.test(value);
-            }
-
-            function isName(value) {
-                return typeof value === 'string' && /^[A-Za-z0-9_.\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u024F-]+$/.test(value);
-            }
-
-            // Zabbix resolves user macros only after discovery, so their values are unknown here and a value that contains
-            // one is only checked for what does not depend on it.
-            function hasMacro(value) {
-                return typeof value === 'string' && macro.test(value);
-            }
-
-            function isStatus(value) {
-                if (hasMacro(value)) {
-                    return !/^\s|\s$/.test(value);
-                }
-                return (typeof value === 'string' || typeof value === 'number') && /^[1-5][0-9][0-9]$/.test(String(value));
-            }
-
-            function isJsonPath(value) {
-                var quoted = /\.{0,2}\[\s*'[^']+'(?:\s*(?:,\s*)?'[^']+')*\s*\]/g,
-                    indexes = /\.{0,2}\[\s*(?:\*\s*|-?\d+(?:(?:\s*,\s*|\s+)-?\d+)*\s*|(?:-?\d[-\d\s]*)?:[-\d\s]*)\]/g,
-                    path = /^\$(?:\.\.?(?:\*|[\w$]+))*(?:(?:\.\.?(?:min|max|avg|length|first|sum)\(\s*\)|~)*$|\.{0,2}\[\s*\?)/;
-
-                if (typeof value !== 'string' || /"|\s$/.test(value)) {
-                    return false;
-                }
-                if (hasMacro(value)) {
-                    return value.charAt(0) === '$' || value.search(macro) === 0;
-                }
-                return /^\$[^"]+$/.test(value) && path.test(value.replace(quoted, '.*').replace(indexes, '.*'));
-            }
-
-            function isScalar(value) {
-                return (typeof value === 'string' && !/^\s|\s$/.test(value)) || typeof value === 'boolean'
-                    || (typeof value === 'number' && isFinite(value)) || value === null;
-            }
-
-            function isDays(value) {
-                if (hasMacro(value)) {
-                    return !/^\s|\s$/.test(value);
-                }
-                return (typeof value === 'string' || typeof value === 'number') && /^-?[0-9]+(\.[0-9]+)?$/.test(String(value));
-            }
-
-            try {
-                entries = JSON.parse(JSON.parse(value).config);
-            }
-            catch (error) {
-                throw 'PUSHIT.WEBCHECK.CONFIG is not valid JSON: ' + error.message;
-            }
-            if (entries && Array.isArray(entries.data)) {
-                entries = entries.data;
-            }
-            if (!Array.isArray(entries)) {
-                throw 'PUSHIT.WEBCHECK.CONFIG must be a JSON array with one object per endpoint';
-            }
-
-            for (var i = 0; i < entries.length; i++) {
-                var types = [], list, j;
-
-                entry = entries[i];
-                label = 'Entry ' + (i + 1);
-
-                if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
-                    throw label + ' must be a JSON object, got ' + JSON.stringify(entry);
-                }
-                if (isText(entry['{#NAME}'])) {
-                    label += ' (' + entry['{#NAME}'] + ')';
-                }
-                for (var key in entry) {
-                    if (keys.indexOf(key) === -1) {
-                        throw label + ': unknown key ' + JSON.stringify(key) + ', allowed keys are ' + keys.join(', ');
-                    }
-                }
-                check('{#NAME}', isName, 'a name of letters, digits, "_", "-" and "."');
-                check('{#URL}', isText, 'a non-empty string');
-
-                list = entry['{#TYPES}'];
-                if (Array.isArray(list)) {
-                    list = list.join(',');
-                }
-                list = typeof list === 'string' ? list.split(',') : [];
-                for (j = 0; j < list.length; j++) {
-                    var type = list[j].trim().toLowerCase();
-
-                    if (type !== '' && checks.indexOf(type) === -1) {
-                        throw label + ': unknown check ' + JSON.stringify(list[j].trim()) + ' in {#TYPES}, allowed are '
-                            + checks.join(', ');
-                    }
-                    if (type !== '' && types.indexOf(type) === -1) {
-                        types.push(type);
-                    }
-                }
-                if (types.length === 0) {
-                    fail('{#TYPES}', 'a comma-separated list of ' + checks.join(', '));
-                }
-                entry['{#TYPES}'] = types.join(',');
-
-                if (types.indexOf('http_status') !== -1) {
-                    check('{#EXPECT_STATUS}', isStatus, 'a status code from 100 to 599 or a user macro for http_status');
-                }
-                if (types.indexOf('json_path') !== -1) {
-                    check('{#JSON_PATH}', isJsonPath, 'a JSONPath such as $.status or $.components[\'db-main\'].status'
-                        + ' for json_path, without " and without spaces outside brackets');
-                    check('{#EXPECT_VALUE}', isScalar, 'a string without leading or trailing spaces, a number, a boolean or null'
-                        + ' for json_path');
-                }
-                if (types.indexOf('certificate') !== -1) {
-                    check('{#CERT_WARN_DAYS}', isDays, 'a number of days such as "30" or a user macro for certificate');
-                    check('{#CERT_AVG_DAYS}', isDays, 'a number of days such as "14" or a user macro for certificate');
-                    check('{#CERT_HIGH_DAYS}', isDays, 'a number of days such as "7" or a user macro for certificate');
-                }
-
-                for (j = 0; j < types.length; j++) {
-                    var rule = types[j] === 'certificate' ? 'certificate' : 'HTTP',
-                        id = rule + ' ' + entry['{#NAME}'];
-
-                    if (id in names && names[id] !== i) {
-                        throw label + ': {#NAME} is already used by entry ' + (names[id] + 1) + ', ' + rule
-                            + ' entries need unique names';
-                    }
-                    names[id] = i;
-                }
-            }
-
-            return JSON.stringify(entries);
+          params: |-
+            // replaced with the content of discovery_script.js by make, see template.dist.yaml
+            throw 'This is the unbuilt source template.yaml, import template.dist.yaml from https://github.com/we-push-it/zabbix-web-check/releases instead';
           filter:
             conditions:
               - macro: '{#TYPES}'
-                value: ^(.+,)*certificate(,.+)*$
+                value: '^(.+,)*certificate(,.+)*$'
           description: 'Discovery rule for items based on x509 certificate data'
           item_prototypes:
             - uuid: 6881257e2c9641039824bc4dc526e486
@@ -230,17 +83,17 @@ zabbix_export:
                 - uuid: d48d334e56e34d33a43d2d95d82d4200
                   expression: |
                     last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration["{#URL}#{#NAME}"]) <= {#CERT_WARN_DAYS}
-                  name: 'Certificate for {#NAME} will expire in {#CERT_WARN_DAYS} days or less'
+                  name: 'Certificate for {#NAME} will expire in {#CERT_WARN_DAYS} days or less (WARN)'
                   priority: WARNING
                 - uuid: 1cc9cad76a92426383ab473e3c6df510
                   expression: |
                     last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration["{#URL}#{#NAME}"]) <= {#CERT_AVG_DAYS}
-                  name: 'Certificate for {#NAME} will expire in {#CERT_AVG_DAYS} days or less'
+                  name: 'Certificate for {#NAME} will expire in {#CERT_AVG_DAYS} days or less (AVERAGE)'
                   priority: AVERAGE
                 - uuid: bed26a45d9ae43ecb186433ce69a33d1
                   expression: |
                     last(/PUSH IT Webcheck/pushit.webcheck.certificate.days_until_expiration["{#URL}#{#NAME}"]) <= {#CERT_HIGH_DAYS}
-                  name: 'Certificate for {#NAME} will expire in {#CERT_HIGH_DAYS} days or less'
+                  name: 'Certificate for {#NAME} will expire in {#CERT_HIGH_DAYS} days or less (HIGH)'
                   priority: HIGH
                   description: >-
                     The certificate for {#URL} will expire in {#CERT_HIGH_DAYS} days or less. Immediate action required
@@ -248,168 +101,57 @@ zabbix_export:
           parameters:
             - name: config
               value: '{$PUSHIT.WEBCHECK.CONFIG}'
+          overrides:
+            - name: 'Undiscover WARN trigger'
+              step: '1'
+              filter:
+                conditions:
+                  - macro: '{#CERT_WARN_DAYS}'
+                    value: ^-1$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: 'Certificate for .*? will expire in .*? days or less \(WARN\)'
+                  discover: NO_DISCOVER
+            - name: 'Undiscover AVG trigger'
+              step: '2'
+              filter:
+                conditions:
+                  - macro: '{#CERT_AVG_DAYS}'
+                    value: ^-1$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: 'Certificate for .*? will expire in .*? days or less \(AVERAGE\)'
+                  discover: NO_DISCOVER
+            - name: 'Undiscover HIGH trigger'
+              step: '3'
+              filter:
+                conditions:
+                  - macro: '{#CERT_HIGH_DAYS}'
+                    value: ^-1$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: 'Certificate for .*? will expire in .*? days or less \(HIGH\)'
+                  discover: NO_DISCOVER
         - uuid: 9894a92ce16b4476a698cf55995d56ee
           name: HTTP
           type: SCRIPT
           key: pushit.webcheck.discovery.http
           delay: 10m
-          params: |
-            var keys = ['{#NAME}', '{#URL}', '{#TYPES}', '{#EXPECT_STATUS}', '{#JSON_PATH}', '{#EXPECT_VALUE}',
-                    '{#CERT_WARN_DAYS}', '{#CERT_AVG_DAYS}', '{#CERT_HIGH_DAYS}'],
-                checks = ['http_status', 'json_path', 'certificate'],
-                macro = /\{\$[A-Z0-9_.]+(?:: *(?:"(?:[^"\\]|\\"|\\(?!"))*" *|[^ "}][^}]*)?)?\}/,
-                names = {},
-                entries, entry, label;
-
-            function fail(key, what) {
-                var value = entry[key];
-
-                throw label + ': ' + key + ' must be ' + what
-                    + (value === undefined ? ', but it is missing' : ', got ' + JSON.stringify(value));
-            }
-
-            function check(key, test, what) {
-                if (!test(entry[key])) {
-                    fail(key, what);
-                }
-            }
-
-            function isText(value) {
-                return typeof value === 'string' && /\S/.test(value);
-            }
-
-            function isName(value) {
-                return typeof value === 'string' && /^[A-Za-z0-9_.\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u024F-]+$/.test(value);
-            }
-
-            // Zabbix resolves user macros only after discovery, so their values are unknown here and a value that contains
-            // one is only checked for what does not depend on it.
-            function hasMacro(value) {
-                return typeof value === 'string' && macro.test(value);
-            }
-
-            function isStatus(value) {
-                if (hasMacro(value)) {
-                    return !/^\s|\s$/.test(value);
-                }
-                return (typeof value === 'string' || typeof value === 'number') && /^[1-5][0-9][0-9]$/.test(String(value));
-            }
-
-            function isJsonPath(value) {
-                var quoted = /\.{0,2}\[\s*'[^']+'(?:\s*(?:,\s*)?'[^']+')*\s*\]/g,
-                    indexes = /\.{0,2}\[\s*(?:\*\s*|-?\d+(?:(?:\s*,\s*|\s+)-?\d+)*\s*|(?:-?\d[-\d\s]*)?:[-\d\s]*)\]/g,
-                    path = /^\$(?:\.\.?(?:\*|[\w$]+))*(?:(?:\.\.?(?:min|max|avg|length|first|sum)\(\s*\)|~)*$|\.{0,2}\[\s*\?)/;
-
-                if (typeof value !== 'string' || /"|\s$/.test(value)) {
-                    return false;
-                }
-                if (hasMacro(value)) {
-                    return value.charAt(0) === '$' || value.search(macro) === 0;
-                }
-                return /^\$[^"]+$/.test(value) && path.test(value.replace(quoted, '.*').replace(indexes, '.*'));
-            }
-
-            function isScalar(value) {
-                return (typeof value === 'string' && !/^\s|\s$/.test(value)) || typeof value === 'boolean'
-                    || (typeof value === 'number' && isFinite(value)) || value === null;
-            }
-
-            function isDays(value) {
-                if (hasMacro(value)) {
-                    return !/^\s|\s$/.test(value);
-                }
-                return (typeof value === 'string' || typeof value === 'number') && /^-?[0-9]+(\.[0-9]+)?$/.test(String(value));
-            }
-
-            try {
-                entries = JSON.parse(JSON.parse(value).config);
-            }
-            catch (error) {
-                throw 'PUSHIT.WEBCHECK.CONFIG is not valid JSON: ' + error.message;
-            }
-            if (entries && Array.isArray(entries.data)) {
-                entries = entries.data;
-            }
-            if (!Array.isArray(entries)) {
-                throw 'PUSHIT.WEBCHECK.CONFIG must be a JSON array with one object per endpoint';
-            }
-
-            for (var i = 0; i < entries.length; i++) {
-                var types = [], list, j;
-
-                entry = entries[i];
-                label = 'Entry ' + (i + 1);
-
-                if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
-                    throw label + ' must be a JSON object, got ' + JSON.stringify(entry);
-                }
-                if (isText(entry['{#NAME}'])) {
-                    label += ' (' + entry['{#NAME}'] + ')';
-                }
-                for (var key in entry) {
-                    if (keys.indexOf(key) === -1) {
-                        throw label + ': unknown key ' + JSON.stringify(key) + ', allowed keys are ' + keys.join(', ');
-                    }
-                }
-                check('{#NAME}', isName, 'a name of letters, digits, "_", "-" and "."');
-                check('{#URL}', isText, 'a non-empty string');
-
-                list = entry['{#TYPES}'];
-                if (Array.isArray(list)) {
-                    list = list.join(',');
-                }
-                list = typeof list === 'string' ? list.split(',') : [];
-                for (j = 0; j < list.length; j++) {
-                    var type = list[j].trim().toLowerCase();
-
-                    if (type !== '' && checks.indexOf(type) === -1) {
-                        throw label + ': unknown check ' + JSON.stringify(list[j].trim()) + ' in {#TYPES}, allowed are '
-                            + checks.join(', ');
-                    }
-                    if (type !== '' && types.indexOf(type) === -1) {
-                        types.push(type);
-                    }
-                }
-                if (types.length === 0) {
-                    fail('{#TYPES}', 'a comma-separated list of ' + checks.join(', '));
-                }
-                entry['{#TYPES}'] = types.join(',');
-
-                if (types.indexOf('http_status') !== -1) {
-                    check('{#EXPECT_STATUS}', isStatus, 'a status code from 100 to 599 or a user macro for http_status');
-                }
-                if (types.indexOf('json_path') !== -1) {
-                    check('{#JSON_PATH}', isJsonPath, 'a JSONPath such as $.status or $.components[\'db-main\'].status'
-                        + ' for json_path, without " and without spaces outside brackets');
-                    check('{#EXPECT_VALUE}', isScalar, 'a string without leading or trailing spaces, a number, a boolean or null'
-                        + ' for json_path');
-                }
-                if (types.indexOf('certificate') !== -1) {
-                    check('{#CERT_WARN_DAYS}', isDays, 'a number of days such as "30" or a user macro for certificate');
-                    check('{#CERT_AVG_DAYS}', isDays, 'a number of days such as "14" or a user macro for certificate');
-                    check('{#CERT_HIGH_DAYS}', isDays, 'a number of days such as "7" or a user macro for certificate');
-                }
-
-                for (j = 0; j < types.length; j++) {
-                    var rule = types[j] === 'certificate' ? 'certificate' : 'HTTP',
-                        id = rule + ' ' + entry['{#NAME}'];
-
-                    if (id in names && names[id] !== i) {
-                        throw label + ': {#NAME} is already used by entry ' + (names[id] + 1) + ', ' + rule
-                            + ' entries need unique names';
-                    }
-                    names[id] = i;
-                }
-            }
-
-            return JSON.stringify(entries);
+          params: |-
+            // replaced with the content of discovery_script.js by make, see template.dist.yaml
+            throw 'This is the unbuilt source template.yaml, import template.dist.yaml from https://github.com/we-push-it/zabbix-web-check/releases instead';
           filter:
             evaltype: OR
             conditions:
               - macro: '{#TYPES}'
-                value: ^(.+,)*http_status(,.+)*$
+                value: '^(.+,)*http_status(,.+)*$'
               - macro: '{#TYPES}'
-                value: ^(.+,)*json_path(,.+)*$
+                value: '^(.+,)*json_path_text(,.+)*$'
+              - macro: '{#TYPES}'
+                value: '^(.+,)*json_path_number(,.+)*$'
           description: 'Discovery rule for items based on an HTTP response from the endpoint'
           item_prototypes:
             - uuid: a0644fcad9c249a38f28b4285e38392c
@@ -479,9 +221,9 @@ zabbix_export:
                     agent or the whole host is not reachable, or because Response {#NAME} is disabled. Whether the
                     monitored service is up is unknown; if it runs on the same host, it may be down as well.
             - uuid: 4517fccf57e3473a80e786ada27dac6b
-              name: 'JSON path {#NAME}'
+              name: 'JSON path (text) {#NAME}'
               type: DEPENDENT
-              key: 'pushit.webcheck.http.json_path["{#URL}#{#NAME}"]'
+              key: 'pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"]'
               value_type: TEXT
               discover: NO_DISCOVER
               preprocessing:
@@ -498,7 +240,7 @@ zabbix_export:
                   error_handler_params: '[no value]'
                 - type: JSONPATH
                   parameters:
-                    - '{#JSON_PATH}'
+                    - '{#JSON_PATH_TEXT}'
                   error_handler: CUSTOM_VALUE
                   error_handler_params: '[no value]'
               master_item:
@@ -506,45 +248,270 @@ zabbix_export:
               trigger_prototypes:
                 - uuid: 9a42683503184a378dc57cc56f3b0d6b
                   expression: |
-                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path["{#URL}#{#NAME}"])<>"{#EXPECT_VALUE}"
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"])<>"{#EXPECT_VALUE_TEXT}"
                     and
-                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path["{#URL}#{#NAME}"])<>"[no value]"
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"])<>"[no value]"
                   recovery_mode: RECOVERY_EXPRESSION
                   recovery_expression: >-
-                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path["{#URL}#{#NAME}"])="{#EXPECT_VALUE}"
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"])="{#EXPECT_VALUE_TEXT}"
                     or
-                    count(/PUSH IT Webcheck/pushit.webcheck.http.json_path["{#URL}#{#NAME}"],
+                    count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"],
                     {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","[no value]")=0
-                  name: 'Unexpected JSON value for {#NAME}'
+                  name: 'JSON value for {#NAME} does not match expected value (text)'
                   priority: HIGH
+                  discover: NO_DISCOVER
                   description: >-
-                    The value at "{#JSON_PATH}" in the response of the monitored service does not match the expected
-                    value of "{#EXPECT_VALUE}". The problem stays open until the service answers with that value again.
+                    The value at "{#JSON_PATH_TEXT}" in the response of the monitored service does not match the
+                    expected value "{#EXPECT_VALUE_TEXT}". The problem stays open until the service answers with that
+                    value again. If only [no value] arrives for {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}, No JSON
+                    value for {#NAME} (text) takes over.
+                - uuid: da42163600d148818d06da0adfbffc42
+                  expression: |
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"])="{#EXPECT_VALUE_TEXT}"
+                    and
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"])<>"[no value]"
+                  recovery_mode: RECOVERY_EXPRESSION
+                  recovery_expression: >-
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"])<>"{#EXPECT_VALUE_TEXT}"
+                    and
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"])<>"[no value]"
+                    or
+                    count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"],
+                    {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","[no value]")=0
+                  name: 'JSON value for {#NAME} matches prohibited value (text)'
+                  priority: HIGH
+                  discover: NO_DISCOVER
+                  description: >-
+                    The value at "{#JSON_PATH_TEXT}" in the response of the monitored service matches the prohibited
+                    value "{#EXPECT_VALUE_TEXT}". The problem stays open until the service answers with another value.
                     If only [no value] arrives for {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}, No JSON value for
-                    {#NAME} takes over.
+                    {#NAME} (text) takes over.
                 - uuid: e704b580f33040b8bb0183abf564358f
                   expression: >-
-                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path["{#URL}#{#NAME}"])="[no value]"
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"])="[no value]"
                     and
-                    count(/PUSH IT Webcheck/pushit.webcheck.http.json_path["{#URL}#{#NAME}"],
+                    count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"],
                     {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","[no value]")=0
-                  name: 'No JSON value for {#NAME}'
+                  name: 'No JSON value for {#NAME} (text)'
                   priority: HIGH
                   description: >-
-                    No value could be read at "{#JSON_PATH}" in the responses of the monitored service within the last
-                    {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}: the service did not answer, the body is not JSON or
-                    the path does not exist. JSON path {#NAME} is [no value] in that case.
+                    No value could be read at "{#JSON_PATH_TEXT}" in the responses of the monitored service within the
+                    last {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}: the service did not answer, the body is not
+                    JSON or the path does not exist. JSON path (text) {#NAME} is [no value] in that case.
                 - uuid: 656b1595bc2845e4b09aef1897a25b80
                   expression: >-
-                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.json_path["{#URL}#{#NAME}"],
+                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"],
                     {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE})=1
-                  name: 'No data for JSON path {#NAME}'
+                  name: 'No data for JSON path (text) {#NAME}'
                   priority: WARNING
                   description: >-
-                    No value at all, not even [no value], has arrived for JSON path {#NAME} for more than
+                    No value at all, not even [no value], has arrived for JSON path (text) {#NAME} for more than
                     {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}. The check is not running, usually because the Zabbix
                     agent or the whole host is not reachable, or because Response {#NAME} is disabled. Whether the
                     monitored service is up is unknown; if it runs on the same host, it may be down as well.
+            - uuid: 924b1fa1897f441388287043b06567f0
+              name: 'JSON path (number) {#NAME}'
+              type: DEPENDENT
+              key: 'pushit.webcheck.http.json_path_number["{#URL}#{#NAME}"]'
+              value_type: FLOAT
+              discover: NO_DISCOVER
+              preprocessing:
+                - type: REGEX
+                  parameters:
+                    - '\A(?:HTTP/[^\n]*\n(?:[^\r\n][^\n]*\n)*\r?\n(?=HTTP/))*HTTP/[^\n]*\n(?:[^\r\n][^\n]*\n)*\r?\n[^{\[]*([\s\S]*)'
+                    - \1
+                - type: JSONPATH
+                  parameters:
+                    - '{#JSON_PATH_NUMBER}'
+              master_item:
+                key: 'web.page.get["{#URL}#{#NAME}"]'
+            - uuid: ffe03c9c6eea48e5a1fc2668579a4e57
+              name: 'JSON path (number) readable {#NAME}'
+              type: DEPENDENT
+              key: 'pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"]'
+              discover: NO_DISCOVER
+              description: >-
+                1 if a number could be read at "{#JSON_PATH_NUMBER}" in the last response of the monitored service, 0 if
+                the request failed, the body is not JSON, the path does not exist or the value there is not a number.
+                JSON path (number) {#NAME} is not supported in that case. The triggers of the number check use this item
+                to tell a failing service (0) from a check that does not run at all (no value).
+              preprocessing:
+                - type: CHECK_NOT_SUPPORTED
+                  parameters:
+                    - '-1'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '[no value]'
+                - type: REGEX
+                  parameters:
+                    - '\A(?:HTTP/[^\n]*\n(?:[^\r\n][^\n]*\n)*\r?\n(?=HTTP/))*HTTP/[^\n]*\n(?:[^\r\n][^\n]*\n)*\r?\n[^{\[]*([\s\S]*)'
+                    - \1
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '[no value]'
+                - type: JSONPATH
+                  parameters:
+                    - '{#JSON_PATH_NUMBER}'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '[no value]'
+                - type: REGEX
+                  parameters:
+                    - '\A *("?)[+-]?(?:[0-9]+\.?[0-9]*|\.[0-9]+)(?:[eE][+-]?[0-9]+)?\1 *[\r\n]*\z'
+                    - '1'
+                  error_handler: CUSTOM_VALUE
+                  error_handler_params: '0'
+              master_item:
+                key: 'web.page.get["{#URL}#{#NAME}"]'
+              trigger_prototypes:
+                - uuid: 792d81bcdbb24e16a441aa8c8cd9dc22
+                  expression: >-
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=0
+                    and
+                    count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],
+                    {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","0")=0
+                  name: 'No JSON value for {#NAME} (number)'
+                  priority: HIGH
+                  description: >-
+                    No number could be read at "{#JSON_PATH_NUMBER}" in the responses of the monitored service within
+                    the last {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}: the service did not answer, the body is not
+                    JSON, the path does not exist or the value there is not a number. JSON path (number) readable
+                    {#NAME} is 0 in that case.
+                - uuid: 88adb01d02274961bf3dbadf8f7a92d0
+                  expression: >-
+                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],
+                    {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE})=1
+                  name: 'No data for JSON path (number) {#NAME}'
+                  priority: WARNING
+                  description: >-
+                    No value at all, not even 0, has arrived for JSON path (number) readable {#NAME} for more than
+                    {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}. The check is not running, usually because the Zabbix
+                    agent or the whole host is not reachable, or because Response {#NAME} is disabled. Whether the
+                    monitored service is up is unknown; if it runs on the same host, it may be down as well.
+          trigger_prototypes:
+            - uuid: 5fb89ee56ac94b8d9e716ca51dc7f685
+              expression: |
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number["{#URL}#{#NAME}"])<>{#EXPECT_VALUE_NUMBER}
+                and
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
+              recovery_mode: RECOVERY_EXPRESSION
+              recovery_expression: >-
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
+                or
+                count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],1s)>0
+                and
+                count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],
+                {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","0")=0
+              name: 'JSON value for {#NAME} does not match expected value (number)'
+              priority: HIGH
+              discover: NO_DISCOVER
+              description: >-
+                The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service does not match the expected
+                value {#EXPECT_VALUE_NUMBER}. The problem stays open until the service answers with a number that
+                satisfies the comparison again. If no number can be read for
+                {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}, No JSON value for {#NAME} (number) takes over.
+            - uuid: 0cefa5a1d58446be8ea2762cafdf0b62
+              expression: |
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number["{#URL}#{#NAME}"])={#EXPECT_VALUE_NUMBER}
+                and
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
+              recovery_mode: RECOVERY_EXPRESSION
+              recovery_expression: >-
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
+                or
+                count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],1s)>0
+                and
+                count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],
+                {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","0")=0
+              name: 'JSON value for {#NAME} matches prohibited value (number)'
+              priority: HIGH
+              discover: NO_DISCOVER
+              description: >-
+                The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service matches the prohibited value
+                {#EXPECT_VALUE_NUMBER}. The problem stays open until the service answers with a number that satisfies
+                the comparison again. If no number can be read for {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}, No
+                JSON value for {#NAME} (number) takes over.
+            - uuid: f9f4429faf20486d8f574e5a055d5eea
+              expression: |
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number["{#URL}#{#NAME}"])>={#EXPECT_VALUE_NUMBER}
+                and
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
+              recovery_mode: RECOVERY_EXPRESSION
+              recovery_expression: >-
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
+                or
+                count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],1s)>0
+                and
+                count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],
+                {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","0")=0
+              name: 'JSON value for {#NAME} is not below expected limit (number)'
+              priority: HIGH
+              discover: NO_DISCOVER
+              description: >-
+                The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service must be less than
+                {#EXPECT_VALUE_NUMBER}, but is greater than or equal to that limit. The problem stays open until the
+                service answers with a number that satisfies the comparison again. If no number can be read for
+                {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}, No JSON value for {#NAME} (number) takes over.
+            - uuid: 2c87fac4270d44e38810fcb6e3698623
+              expression: |
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number["{#URL}#{#NAME}"])>{#EXPECT_VALUE_NUMBER}
+                and
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
+              recovery_mode: RECOVERY_EXPRESSION
+              recovery_expression: >-
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
+                or
+                count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],1s)>0
+                and
+                count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],
+                {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","0")=0
+              name: 'JSON value for {#NAME} exceeds expected maximum (number)'
+              priority: HIGH
+              discover: NO_DISCOVER
+              description: >-
+                The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service must be less than or equal
+                to {#EXPECT_VALUE_NUMBER}, but exceeds that limit. The problem stays open until the service answers with
+                a number that satisfies the comparison again. If no number can be read for
+                {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}, No JSON value for {#NAME} (number) takes over.
+            - uuid: a0e9315f06b9422d9c26878a52bb4cf0
+              expression: |
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number["{#URL}#{#NAME}"])<={#EXPECT_VALUE_NUMBER}
+                and
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
+              recovery_mode: RECOVERY_EXPRESSION
+              recovery_expression: >-
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
+                or
+                count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],1s)>0
+                and
+                count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],
+                {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","0")=0
+              name: 'JSON value for {#NAME} is not above expected limit (number)'
+              priority: HIGH
+              discover: NO_DISCOVER
+              description: >-
+                The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service must be greater than
+                {#EXPECT_VALUE_NUMBER}, but is less than or equal to that limit. The problem stays open until the
+                service answers with a number that satisfies the comparison again. If no number can be read for
+                {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}, No JSON value for {#NAME} (number) takes over.
+            - uuid: 1dc538495f45492e9abf7069061fbf03
+              expression: |
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number["{#URL}#{#NAME}"])<{#EXPECT_VALUE_NUMBER}
+                and
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
+              recovery_mode: RECOVERY_EXPRESSION
+              recovery_expression: >-
+                last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"])=1
+                or
+                count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],1s)>0
+                and
+                count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_number.readable["{#URL}#{#NAME}"],
+                {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","0")=0
+              name: 'JSON value for {#NAME} is below expected minimum (number)'
+              priority: HIGH
+              discover: NO_DISCOVER
+              description: >-
+                The value at "{#JSON_PATH_NUMBER}" in the response of the monitored service must be greater than or
+                equal to {#EXPECT_VALUE_NUMBER}, but is below that limit. The problem stays open until the service
+                answers with a number that satisfies the comparison again. If no number can be read for
+                {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}, No JSON value for {#NAME} (number) takes over.
           parameters:
             - name: config
               value: '{$PUSHIT.WEBCHECK.CONFIG}'
@@ -554,21 +521,216 @@ zabbix_export:
               filter:
                 conditions:
                   - macro: '{#TYPES}'
-                    value: ^(.+,)*http_status(,.+)*$
+                    value: '^(.+,)*http_status(,.+)*$'
               operations:
                 - operator: REGEXP
                   value: '^HTTP status.*$'
                   discover: DISCOVER
-            - name: 'Enable json_path'
+            - name: 'Enable json_path_text'
               step: '2'
               filter:
                 conditions:
                   - macro: '{#TYPES}'
-                    value: ^(.+,)*json_path(,.+)*$
+                    value: '^(.+,)*json_path_text(,.+)*$'
               operations:
                 - operator: REGEXP
-                  value: '^JSON path.*$'
+                  value: '^JSON path \(text\).*$'
                   discover: DISCOVER
+                - operator: REGEXP
+                  value: '^JSON path [^(].*$'
+                  discover: DISCOVER
+            - name: 'Enable json_path_number'
+              step: '3'
+              filter:
+                conditions:
+                  - macro: '{#TYPES}'
+                    value: '^(.+,)*json_path_number(,.+)*$'
+              operations:
+                - operator: REGEXP
+                  value: '^JSON path \(number\).*$'
+                  discover: DISCOVER
+            - name: 'Enable json_text EQUALS assertion'
+              step: '4'
+              filter:
+                conditions:
+                  - macro: '{#JSON_OPERATOR_TEXT}'
+                    value: ^=$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: '^JSON value for .*? does not match expected value \(text\)$'
+                  discover: DISCOVER
+            - name: 'Enable json_text NOT EQUALS assertion'
+              step: '5'
+              filter:
+                conditions:
+                  - macro: '{#JSON_OPERATOR_TEXT}'
+                    value: ^<>$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: '^JSON value for .*? matches prohibited value \(text\)$'
+                  discover: DISCOVER
+            - name: 'Enable json_number EQUALS assertion'
+              step: '6'
+              filter:
+                conditions:
+                  - macro: '{#JSON_OPERATOR_NUMBER}'
+                    value: ^=$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: '^JSON value for .*? does not match expected value \(number\)$'
+                  discover: DISCOVER
+            - name: 'Enable json_number NOT EQUALS assertion'
+              step: '7'
+              filter:
+                conditions:
+                  - macro: '{#JSON_OPERATOR_NUMBER}'
+                    value: ^<>$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: '^JSON value for .*? matches prohibited value \(number\)$'
+                  discover: DISCOVER
+            - name: 'Enable json_number LESS THAN assertion'
+              step: '8'
+              filter:
+                conditions:
+                  - macro: '{#JSON_OPERATOR_NUMBER}'
+                    value: ^<$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: '^JSON value for .*? is not below expected limit \(number\)$'
+                  discover: DISCOVER
+            - name: 'Enable json_number LESS THAN OR EQUALS assertion'
+              step: '9'
+              filter:
+                conditions:
+                  - macro: '{#JSON_OPERATOR_NUMBER}'
+                    value: ^<=$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: '^JSON value for .*? exceeds expected maximum \(number\)$'
+                  discover: DISCOVER
+            - name: 'Enable json_number GREATER THAN assertion'
+              step: '10'
+              filter:
+                conditions:
+                  - macro: '{#JSON_OPERATOR_NUMBER}'
+                    value: ^>$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: '^JSON value for .*? is not above expected limit \(number\)$'
+                  discover: DISCOVER
+            - name: 'Enable json_number GREATER THAN OR EQUALS assertion'
+              step: '11'
+              filter:
+                conditions:
+                  - macro: '{#JSON_OPERATOR_NUMBER}'
+                    value: ^>=$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: '^JSON value for .*? is below expected minimum \(number\)$'
+                  discover: DISCOVER
+        - uuid: 97859698c0824a8fa019ae4fcb2aedca
+          name: Performance
+          type: SCRIPT
+          key: pushit.webcheck.discovery.performance
+          delay: 10m
+          params: |-
+            // replaced with the content of discovery_script.js by make, see template.dist.yaml
+            throw 'This is the unbuilt source template.yaml, import template.dist.yaml from https://github.com/we-push-it/zabbix-web-check/releases instead';
+          filter:
+            conditions:
+              - macro: '{#TYPES}'
+                value: '^(.+,)*http_performance(,.+)*$'
+          description: 'Discovery rule for HTTP performance checks for the endpoint'
+          item_prototypes:
+            - uuid: 252b7ac30a05405c91546f13199c172e
+              name: 'HTTP performance {#NAME}'
+              key: 'web.page.perf["{#URL}#{#NAME}"]'
+              delay: '{$PUSHIT.WEBCHECK.HTTP.INTERVAL}'
+              value_type: FLOAT
+              timeout: '{#PERF_TIMEOUT}'
+              trigger_prototypes:
+                - uuid: 8fda601e87fa4a52ae7c1ec2e8085129
+                  expression: nodata(/PUSH IT Webcheck/web.page.perf["{#URL}#{#NAME}"],{#PERF_NODATA})=1
+                  name: 'Missing HTTP performance data for {#NAME}'
+                  priority: WARNING
+                  description: >-
+                    No load time has been measured for {#NAME} for {#PERF_NODATA}: the request failed or took longer
+                    than the item timeout of {#PERF_TIMEOUT}, or the check is not running, for example because the
+                    Zabbix agent is not reachable. The threshold triggers keep their last state until a load time is
+                    measured again.
+                - uuid: c014d2e41ba740ce83092e0cfc5fd084
+                  expression: last(/PUSH IT Webcheck/web.page.perf["{#URL}#{#NAME}"])>{#PERF_WARN}
+                  name: 'Performance of {#NAME} exceeds WARN limit'
+                  priority: WARNING
+                - uuid: e8fd416c7da241a3b2695a7494fd1820
+                  expression: last(/PUSH IT Webcheck/web.page.perf["{#URL}#{#NAME}"])>{#PERF_AVG}
+                  name: 'Performance of {#NAME} exceeds AVERAGE limit'
+                  priority: AVERAGE
+                - uuid: 3353afe283c0411181e96c7326ec4786
+                  expression: last(/PUSH IT Webcheck/web.page.perf["{#URL}#{#NAME}"])>{#PERF_HIGH}
+                  name: 'Performance of {#NAME} exceeds HIGH limit'
+                  priority: HIGH
+                - uuid: 2d02dc6a916d4fc2befc5daaa12ad680
+                  expression: last(/PUSH IT Webcheck/web.page.perf["{#URL}#{#NAME}"])>{#PERF_DISASTER}
+                  name: 'Performance of {#NAME} exceeds DISASTER limit'
+                  priority: DISASTER
+          parameters:
+            - name: config
+              value: '{$PUSHIT.WEBCHECK.CONFIG}'
+          overrides:
+            - name: 'Undiscover WARN trigger'
+              step: '1'
+              filter:
+                conditions:
+                  - macro: '{#PERF_WARN}'
+                    value: ^-1$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: 'Performance of .*? exceeds WARN limit'
+                  discover: NO_DISCOVER
+            - name: 'Undiscover AVG trigger'
+              step: '2'
+              filter:
+                conditions:
+                  - macro: '{#PERF_AVG}'
+                    value: ^-1$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: 'Performance of .*? exceeds AVERAGE limit'
+                  discover: NO_DISCOVER
+            - name: 'Undiscover HIGH trigger'
+              step: '3'
+              filter:
+                conditions:
+                  - macro: '{#PERF_HIGH}'
+                    value: ^-1$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: 'Performance of .*? exceeds HIGH limit'
+                  discover: NO_DISCOVER
+            - name: 'Undiscover DISASTER trigger'
+              step: '4'
+              filter:
+                conditions:
+                  - macro: '{#PERF_DISASTER}'
+                    value: ^-1$
+              operations:
+                - operationobject: TRIGGER_PROTOTYPE
+                  operator: REGEXP
+                  value: 'Performance of .*? exceeds DISASTER limit'
+                  discover: NO_DISCOVER
 
       macros:
         - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.HISTORY}'
@@ -581,8 +743,8 @@ zabbix_export:
         - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.INTERVAL}'
           value: 15m
           description: >-
-            Controls the interval in which certificate data is fetched for the endpoint. This is used for entries whose
-            {#TYPES} contains certificate.
+            Controls the interval in which certificate data is fetched for the endpoint. This is used for entries with
+            a certificate check.
         - macro: '{$PUSHIT.WEBCHECK.CERTIFICATE.NO_DATA_GRACE}'
           value: 30m
           description: >-
@@ -591,16 +753,16 @@ zabbix_export:
             raise false no-data problems. If you raise this value, you should review the value of
             PUSHIT.WEBCHECK.CERTIFICATE.HISTORY and its description outlining constraints applying to it.
         - macro: '{$PUSHIT.WEBCHECK.CONFIG}'
-          value: '[]'
+          value: '{}'
           description: >-
-            Configuration for endpoints to check, see
+            Configuration for endpoints to check, a JSON object with one property per endpoint, see
             https://github.com/we-push-it/zabbix-web-check/blob/v0.3.0/README.md for complete documentation of this
             structure.
         - macro: '{$PUSHIT.WEBCHECK.HTTP.INTERVAL}'
           value: 1m
           description: >-
-            Controls the interval in which the HTTP endpoint is called. This is used for entries whose {#TYPES} contains
-            http_status or json_path.
+            Controls the interval in which the HTTP endpoint is called. This is used for entries with expectStatus,
+            json_text, json_number or performance.
         - macro: '{$PUSHIT.WEBCHECK.HTTP_STATUS.NO_STATUS_GRACE}'
           value: 3m
           description: >-
@@ -609,6 +771,7 @@ zabbix_export:
         - macro: '{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}'
           value: 3m
           description: >-
-            Time expression for how long a missing JSON value (no response, a body that is not JSON or nothing at the
-            path) is tolerated before a problem is raised. Must be larger than PUSHIT.WEBCHECK.HTTP.INTERVAL,
-            otherwise it provides no tolerance and can raise false no-data problems.
+            Time expression for how long a missing JSON value (no response, a body that is not JSON, nothing at the
+            path or, for json_number, a value that is not a number) is tolerated before a problem is raised. Must be
+            larger than PUSHIT.WEBCHECK.HTTP.INTERVAL, otherwise it provides no tolerance and can raise false no-data
+            problems.

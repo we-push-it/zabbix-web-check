@@ -1,0 +1,58 @@
+{
+  "shop-frontend": {
+    "url": "https://shop.example.com",
+    "expectStatus": "200",
+    "performance": {
+      "nodata": "3m",
+      "warning": 0.5,
+      "average": 1,
+      "high": 2,
+      "disaster": 5
+    },
+    "certificate": {
+      "warning": 30,
+      "average": 14,
+      "high": 7
+    }
+  },
+  "orders-api": {
+    "url": "http://localhost:8080/health",
+    "json_number": {
+      "path": "$.failedOrders",
+      "expect": 0
+    }
+  },
+  "billing-db": {
+    "url": "http://localhost:8081/actuator/health",
+    "json_text": {
+      "path": "$.components.db.status",
+      "expect": "UP"
+    }
+  },
+  "queue-worker": {
+    "url": "http://localhost:8082/status.json",
+    "json_text": {
+      "path": "$.queueStatus",
+      "expect": "FULL",
+      "operator": "<>"
+    },
+    "json_number": {
+      "path": "$.backlog",
+      "expect": 1000,
+      "operator": "<"
+    }
+  },
+  "admin-auth": {
+    "url": "https://shop.example.com/admin",
+    "expectStatus": "401"
+  },
+  "api": {
+    "url": "https://api.example.com:8443",
+    "expectStatus": "200",
+    "certificate": {
+      "warning": 21,
+      "average": -1,
+      "high": 3
+    }
+  }
+}
