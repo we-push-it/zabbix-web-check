@@ -7,25 +7,111 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
-- Support for numeric values in the JSONPath check
-- Option to override the comparison operator on JSONPath checks
-- Support for the equality ("=", default) and inequality ("<>") operators
-- Support for numeric comparisons <,>,<= and >=
-- New check type HTTP performance
-- Option to disable independent levels of check type HTTP performance
-- Option to disable independent levels of check type Certificate
+- Support for numeric values in the JSONPath check: `json_number` reads a number from a JSON body into the float item
+  `JSON path (number) {#NAME}` and compares it with the operator `=` (default), `<>`, `<`, `<=`, `>` or `>=`
+- Option to override the comparison operator on JSONPath checks with `operator`; `json_text` supports the equality
+  (`=`, default) and inequality (`<>`) operators
+- New check type HTTP performance: `performance` measures the page load time with `web.page.perf` and raises WARNING,
+  AVERAGE, HIGH and DISASTER problems above thresholds in seconds, and a WARNING when no load time is measured for the
+  time given in `nodata`
+  - The item timeout is computed from the thresholds: the highest one rounded up to whole seconds plus 1 second, at
+    least 3 and at most 600 seconds
+  - A slower page or a failed request makes the item *Not supported*: only the WARNING fires, after `nodata`
+- Option to disable single levels of the HTTP performance and certificate checks: a level that is omitted or set to
+  `-1` gets no trigger
+- `JSON path (number) readable {#NAME}` (`1` or `0`), `No JSON value for {#NAME} (number)` (HIGH) and
+  `No data for JSON path (number) {#NAME}` (WARNING), so that a `json_number` check tells a failed request or a value
+  that is not a number from a check that gets no data at all, as the other HTTP checks do
+- The discovery rules check every entry of the new format and stop with an error that names the entry, for example on
+  - unknown keys at any level, such as `json-text`, or `warn` in `certificate`
+  - an entry name with characters other than Latin letters, digits, `_`, `-` and `.`, or a name used twice
+  - an entry without a check or without `url`, and missing values
+  - status codes outside 100 to 599, a `json_number.expect` that is not a number, unknown operators, certificate levels
+    that are not numbers such as `"30d"`, a `nodata` that is not a time period, and performance levels outside 0 to 600
+    or with user macros
+  - expected text values with leading or trailing spaces, and JSON paths with `"` or a syntax error
 
 ### Changed
-- **BC!** Configuration format changed from list of LLD objects to JSON object
-- Rename item `JSON path {#NAME}` to `JSON path (text) {#NAME}`. This change also renames the Zabbix item key from
-`pushit.webcheck.http.json_path` to `pushit.webcheck.http.json_path_text` and the internal type `json_path` to
-`json_path_text`. **Data loss:** This change leads to losing history of the renamed items.
-- Separate `nodata()` checks from actual comparison logic
-- **Data loss:** Triggers got redesigned when support for configurable comparison operators were added. This will lead
-to the history of triggers being lost.
+- **BC!** `{$PUSHIT.WEBCHECK.CONFIG}` is a JSON object with one property per endpoint instead of a list of LLD objects,
+  and its default is `{}`. Upgrade notes:
+  - The property name is the former `{#NAME}` and `url` the former `{#URL}`. The check keys replace `{#TYPES}`:
+    `expectStatus` (`{#EXPECT_STATUS}`), `json_text` with `path` and `expect` (`{#JSON_PATH}`, `{#EXPECT_VALUE}`), and
+    `certificate` with `warning`, `average` and `high` (`{#CERT_WARN_DAYS}`, `{#CERT_AVG_DAYS}`, `{#CERT_HIGH_DAYS}`).
+    A certificate level of `-1` now disables the level
+  - The section *Migration from v0.3.x* in the README has a `jq` command that converts a v0.3.x value
+  - Import `template.dist.yaml` of this release, convert the macro on every host, then click *Execute now* on the three
+    discovery rules of every host and check that none of them is *Not supported*
+  - Until the macro of a host is converted, all three rules stop with
+    `PUSHIT.WEBCHECK.CONFIG uses the list format of v0.3.x and earlier, ...` and change nothing on the host: the items
+    and triggers of v0.3.x keep working
+  - The first successful run renames the items and triggers below in place, so they keep their ids, history and open
+    problems. Rename entries or change URLs only after that run
+  - From v0.2.x or older, update to v0.3.0 first and follow its upgrade notes
+- **BC!** The template to import is `template.dist.yaml`, attached to the GitHub release. `template.yaml` in the
+  repository is only its source: the discovery script is in `discovery_script.js`, and `make` puts it into the
+  template. Imported on its own, `template.yaml` makes all three discovery rules stop with
+  `This is the unbuilt source template.yaml, import template.dist.yaml from https://github.com/we-push-it/zabbix-web-check/releases instead`
+- **BC!** Rename item `JSON path {#NAME}` to `JSON path (text) {#NAME}`. This change also renames the Zabbix item key
+  from `pushit.webcheck.http.json_path["{#URL}#{#NAME}"]` to `pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"]` and
+  the internal type `json_path` in `{#TYPES}` to `json_path_text`. Update calculated items, expression macros and API
+  scripts that use the old key
+- **BC!** Rename the triggers of JSONPath checks: `Unexpected JSON value for {#NAME}` to
+  `JSON value for {#NAME} does not match expected value (text)`, `No JSON value for {#NAME}` to
+  `No JSON value for {#NAME} (text)` and `No data for JSON path {#NAME}` to `No data for JSON path (text) {#NAME}`.
+  The names of the certificate expiry triggers end in `(WARN)`, `(AVERAGE)` or `(HIGH)`. Review actions that match
+  trigger names
+- A third discovery rule, **Performance**, discovers the `performance` checks
+
+## [v0.3.0] - 2026-11-05
+### Added
+- `No status code for {#NAME}` and `No JSON value for {#NAME}` (HIGH) for requests that fail or yield no value
+- `No data for HTTP status {#NAME}` and `No data for JSON path {#NAME}` (WARNING) for checks that get no value at all,
+  for example while the agent is not reachable
+- Both discovery rules check every entry and stop with an error that names the entry
+- `{#TYPES}` also takes a JSON array; case and spaces around the check names do not matter
+- Unit `unixtime` on `Certificate expiration {#NAME}`
+
+### Changed
+- **BC!** All item keys end in `["{#URL}#{#NAME}"]` (before: `["{#URL}"]` for the raw items, `[{#NAME}]` for the
+  dependent items), for example `web.page.get["{#URL}#{#NAME}"]` and `pushit.webcheck.http.status["{#URL}#{#NAME}"]`
+  - The first discovery run after the update renames the existing items in place, so they keep their ids and history
+  - Update everything that refers to the old keys: calculated items, expression macros, API scripts, and `AllowKey`,
+    `DenyKey` or `Alias` rules for the raw keys in the agent configuration
+  - After the import, run discovery once on every host (*Execute now* on both rules) before you change a `{#URL}`,
+    see *Tips and gotchas* in the README
+  - Entries that shared a URL in v0.2.x may keep their checks on the raw item of the last of them; the same README tip
+    explains how to repair them
+- **BC!** Discovery stops with an error on configs that it accepted before (values with user macros are still
+  accepted), for example on entries with
+  - unknown keys, such as a leftover `{#TYPE}` or a comment
+  - unknown check types in `{#TYPES}`, also next to valid ones
+  - a `{#NAME}` with characters other than Latin letters, digits, `_`, `-` and `.`, such as a space
+  - the same `{#NAME}` in two HTTP entries or in two certificate entries
+  - missing values, status codes outside 100 to 599, day thresholds that are not plain numbers such as `30d`, expected
+    values with leading or trailing spaces, or JSON paths with `"` or a syntax error
+- **BC!** While discovery stops with an error, it changes nothing on the host, not even the changes of this release.
+  After the import, check both discovery rules on every host and fix the macro where they are *Not supported*
+- **BC!** `Unexpected status code for {#NAME}` and `Unexpected JSON value for {#NAME}` only fire for a wrong value
+  - A failed request raises `No status code` or `No JSON value` (HIGH) after the grace period, for a new entry at once
+  - An agent that is not reachable raises `No data for ...` (WARNING) instead of `Unexpected ...` (HIGH)
+  - `HTTP status {#NAME}` gets `0` and `JSON path {#NAME}` gets `[no value]` when nothing can be read, instead of
+    becoming *Not supported*
+  - Review actions that match trigger names or severities. After the update, open `Unexpected ...` problems of failing
+    checks are replaced by `No status code` or `No JSON value`, and `No data for ...` can fire briefly
+- Lost resources are disabled immediately and deleted after 7 days instead of being deleted immediately; an entry put
+  back within 7 days returns with its items and history
+- `Days until certificate expires ({#NAME})` is a dependent item of `Certificate data {#NAME}` and is recalculated with
+  every fetch instead of every 6 hours
+- The certificate expiry triggers are named `Certificate for {#NAME} will expire in N days or less`
 
 ### Fixed
-- Bad wording of trigger names "Certificate for NAME will expire in NUMBER or less", added unit so it reads "NUMBER days".
+- Entries that share a URL no longer lose their checks
+- A changed `{#URL}` no longer leaves the entry without checks until the next discovery run
+- Status code and JSON body are taken from the final response when the classic agent puts interim responses such as
+  `103 Early Hints` or the `CONNECT` reply of a proxy in front of it, and a byte order mark before the JSON is ignored
+- `Days until certificate expires ({#NAME})` could stay *Not supported* for up to 6 hours after discovery
+- `Days until certificate expires ({#NAME})` showed 1000 days or more as `Kdays`
+- Wrong and outdated texts in the README and the template
 
 ## [v0.2.0] - 2026-09-29
 ### Changed
@@ -41,6 +127,7 @@ to the history of triggers being lost.
 - `json_path` check
 - `certificate` check
 
-[Unreleased]: https://github.com/we-push-it/zabbix-web-check/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/we-push-it/zabbix-web-check/compare/v0.3.0...HEAD
+[v0.3.0]: https://github.com/we-push-it/zabbix-web-check/compare/v0.2.0...v0.3.0
 [v0.2.0]: https://github.com/we-push-it/zabbix-web-check/compare/v0.1.0...v0.2.0
 [v0.1.0]: https://github.com/we-push-it/zabbix-web-check/compare/2d2d04f1...v0.1.0
