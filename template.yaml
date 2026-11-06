@@ -244,32 +244,69 @@ zabbix_export:
               master_item:
                 key: 'web.page.get["{#URL}#{#NAME}"]'
               trigger_prototypes:
-                - uuid: 302aad4bd03348a8b5da8c8fb1e3d5ba
-                  expression: |
-                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"],{$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE})=1
-                  name: 'Missing JSON value for {#NAME} (text)'
-                  priority: WARNING
-                  description: |
-                    The value at "{#JSON_PATH_TEXT}" in the response of the monitored service was not available for more
-                    than {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}.
-                - uuid: 4952237d989a430ca7a26365ce251990
+                - uuid: 9a42683503184a378dc57cc56f3b0d6b
                   expression: |
                     last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"])<>"{#EXPECT_VALUE_TEXT}"
+                    and
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"])<>"[no value]"
+                  recovery_mode: RECOVERY_EXPRESSION
+                  recovery_expression: >-
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"])="{#EXPECT_VALUE_TEXT}"
+                    or
+                    count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"],
+                    {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","[no value]")=0
                   name: 'JSON value for {#NAME} does not match expected value (text)'
                   priority: HIGH
                   discover: NO_DISCOVER
-                  description: |
+                  description: >-
                     The value at "{#JSON_PATH_TEXT}" in the response of the monitored service does not match the
-                    expected value "{#EXPECT_VALUE_TEXT}".
+                    expected value "{#EXPECT_VALUE_TEXT}". The problem stays open until the service answers with that
+                    value again. If only [no value] arrives for {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}, No JSON
+                    value for {#NAME} (text) takes over.
                 - uuid: da42163600d148818d06da0adfbffc42
                   expression: |
-                      last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"])="{#EXPECT_VALUE_TEXT}"
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"])="{#EXPECT_VALUE_TEXT}"
+                    and
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"])<>"[no value]"
+                  recovery_mode: RECOVERY_EXPRESSION
+                  recovery_expression: >-
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"])<>"{#EXPECT_VALUE_TEXT}"
+                    and
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"])<>"[no value]"
+                    or
+                    count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"],
+                    {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","[no value]")=0
                   name: 'JSON value for {#NAME} matches prohibited value (text)'
                   priority: HIGH
                   discover: NO_DISCOVER
-                  description: |
+                  description: >-
                     The value at "{#JSON_PATH_TEXT}" in the response of the monitored service matches the prohibited
-                    value "{#EXPECT_VALUE_TEXT}".
+                    value "{#EXPECT_VALUE_TEXT}". The problem stays open until the service answers with another value.
+                    If only [no value] arrives for {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}, No JSON value for
+                    {#NAME} (text) takes over.
+                - uuid: e704b580f33040b8bb0183abf564358f
+                  expression: >-
+                    last(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"])="[no value]"
+                    and
+                    count(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"],
+                    {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE},"ne","[no value]")=0
+                  name: 'No JSON value for {#NAME} (text)'
+                  priority: HIGH
+                  description: >-
+                    No value could be read at "{#JSON_PATH_TEXT}" in the responses of the monitored service within the
+                    last {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}: the service did not answer, the body is not
+                    JSON or the path does not exist. JSON path (text) {#NAME} is [no value] in that case.
+                - uuid: 656b1595bc2845e4b09aef1897a25b80
+                  expression: >-
+                    nodata(/PUSH IT Webcheck/pushit.webcheck.http.json_path_text["{#URL}#{#NAME}"],
+                    {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE})=1
+                  name: 'No data for JSON path (text) {#NAME}'
+                  priority: WARNING
+                  description: >-
+                    No value at all, not even [no value], has arrived for JSON path (text) {#NAME} for more than
+                    {$PUSHIT.WEBCHECK.JSON_PATH.NO_RESPONSE_GRACE}. The check is not running, usually because the Zabbix
+                    agent or the whole host is not reachable, or because Response {#NAME} is disabled. Whether the
+                    monitored service is up is unknown; if it runs on the same host, it may be down as well.
             - uuid: 924b1fa1897f441388287043b06567f0
               name: 'JSON path (number) {#NAME}'
               type: DEPENDENT
