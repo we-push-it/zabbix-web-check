@@ -157,12 +157,14 @@ function isScalar(data) {
 }
 
 /**
- * A decimal number such as 30, -1 or 0.5, given as a JSON number or as a string
+ * A number such as 30, -1 or 0.5: any finite JSON number, or a string with a decimal number. A JSON number is not
+ * checked as text, because String() writes small and large numbers with an exponent, such as 0.0000001 as 1e-7
  * @param {any} data
  * @returns {boolean}
  */
 function isNumber(data) {
-    return (typeof data === "string" || typeof data === "number") && /^-?[0-9]+(\.[0-9]+)?$/.test(String(data));
+    return (typeof data === "number" && isFinite(data)) ||
+        (typeof data === "string" && /^-?[0-9]+(\.[0-9]+)?$/.test(data));
 }
 
 /**
